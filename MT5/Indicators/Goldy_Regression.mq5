@@ -100,6 +100,13 @@ input bool     _FutureCenterLine  = true;
 input bool     _UseFixedDate      = false;
 input int      _FutureBars        = 50;
 
+//--- Candle Countdown (extra feature, ported from CandleCountdown.mq4)
+input bool     _ShowCountdown        = true;
+input color    _CountdownColor       = clrGold;
+input int      _CountdownFontSize    = 10;
+input int      _CountdownRightShift  = 4;       // bars right of current bar
+input string   _CountdownFont        = "Arial";
+
 //+------------------------------------------------------------------+
 //| Buffers                                                          |
 //+------------------------------------------------------------------+
@@ -112,7 +119,8 @@ double FillUO_A[], FillUO_B[];   // fill upper outer  (Dev2U .. Dev3U)
 double FillLI_A[], FillLI_B[];   // fill lower inner  (Dev1L .. Dev2L)
 double FillLO_A[], FillLO_B[];   // fill lower outer  (Dev2L .. Dev3L)
 
-const string OBJ_PREFIX = "GOLDY_REG_FUTURE_";
+const string OBJ_PREFIX     = "GOLDY_REG_FUTURE_";
+const string COUNTDOWN_OBJ  = "GOLDY_CANDLE_COUNTDOWN";
 
 //+------------------------------------------------------------------+
 //| Initialization                                                   |
@@ -272,7 +280,74 @@ int OnCalculate(const int rates_total,
    if(_CenterLine && _FutureCenterLine && _FutureBars > 0)
       DrawFutureCenterLine(coeffs, degree, n, time, rates_total);
 
+   if(_ShowCountdown)
+      UpdateCountdown();
+
    return rates_total;
+}
+
+//+------------------------------------------------------------------+
+//| Candle Countdown - shows time remaining until next candle close  |
+//| (ported from MT4 CandleCountdown.mq4 by Comer / EJ_CandleTime)   |
+//+------------------------------------------------------------------+
+void UpdateCountdown()
+{
+   int periodSec = PeriodSeconds(_Period);
+   if(periodSec <= 0) return;
+
+   datetime barOpenTime  = (datetime)SeriesInfoInteger(_Symbol, _Period, SERIES_LASTBAR_DATE);
+   datetime barCloseTime = (datetime)((long)barOpenTime + (long)periodSec);
+   long     leftSec      = (long)(barCloseTime - TimeCurrent());
+   if(leftSec < 1) leftSec = 1;
+
+   bool hasHours = (periodSec > 3600);
+   bool hasDays  = (periodSec > 86400);
+
+   //--- format the countdown text
+   string msg = "";
+   if(hasDays)
+   {
+      msg += IntegerToString((int)(leftSec / 86400)) + "d ";
+      leftSec %= 86400;
+   }
+
+   int hours = (int)(leftSec / 3600);
+   int mins  = (int)((leftSec % 3600) / 60);
+   int secs  = (int)(leftSec % 60);
+
+   if(hasHours)
+      msg += StringFormat("%02d:%02d:%02d", hours, mins, secs);
+   else
+      msg += StringFormat("%02d:%02d", mins, secs);
+
+   //--- position: a few bars to the right of the current bar,
+   //              at the higher of open/close so it sits at the candle top
+   datetime objX = (datetime)((long)barOpenTime + (long)periodSec * (long)_CountdownRightShift);
+   double   openP  = iOpen(_Symbol, _Period, 0);
+   double   closeP = iClose(_Symbol, _Period, 0);
+   double   objY   = MathMax(openP, closeP);
+
+   string fullMsg = "<-- " + msg;
+
+   if(ObjectFind(0, COUNTDOWN_OBJ) < 0)
+   {
+      ObjectCreate(0, COUNTDOWN_OBJ, OBJ_TEXT, 0, objX, objY);
+      ObjectSetInteger(0, COUNTDOWN_OBJ, OBJPROP_ANCHOR,     ANCHOR_LEFT);
+      ObjectSetInteger(0, COUNTDOWN_OBJ, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, COUNTDOWN_OBJ, OBJPROP_HIDDEN,     true);
+      ObjectSetInteger(0, COUNTDOWN_OBJ, OBJPROP_BACK,       false);
+   }
+   else
+   {
+      ObjectMove(0, COUNTDOWN_OBJ, 0, objX, objY);
+   }
+
+   ObjectSetInteger(0, COUNTDOWN_OBJ, OBJPROP_COLOR,    _CountdownColor);
+   ObjectSetInteger(0, COUNTDOWN_OBJ, OBJPROP_FONTSIZE, _CountdownFontSize);
+   ObjectSetString (0, COUNTDOWN_OBJ, OBJPROP_FONT,     _CountdownFont);
+   ObjectSetString (0, COUNTDOWN_OBJ, OBJPROP_TEXT,     fullMsg);
+
+   Comment(msg + " left to bar end");
 }
 
 //+------------------------------------------------------------------+
