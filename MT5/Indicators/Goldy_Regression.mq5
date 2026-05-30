@@ -98,10 +98,7 @@ input color    _FillColor2        = C'48,0,0';
 input bool     _CenterLine        = true;
 input bool     _FutureCenterLine  = true;
 input bool     _UseFixedDate      = false;
-
-//--- internal constant (MT5 needs an explicit length for the
-//    future projection; MT4 handled this differently)
-#define _FutureBars 50
+input int      _FutureBars        = 50;
 
 //+------------------------------------------------------------------+
 //| Buffers                                                          |
