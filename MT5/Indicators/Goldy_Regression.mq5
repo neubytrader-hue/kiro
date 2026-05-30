@@ -14,7 +14,7 @@
 #property version   "1.00"
 #property strict
 #property indicator_chart_window
-#property indicator_buffers 15
+#property indicator_buffers 16
 #property indicator_plots   11
 
 //--- Plot 0: Center line ------------------------------------------
@@ -107,6 +107,17 @@ input int      _CountdownFontSize    = 10;
 input int      _CountdownRightShift  = 4;       // bars right of current bar
 input string   _CountdownFont        = "Arial";
 
+//--- Alerts (extra feature) ---------------------------------------
+input bool     _AlertEnabled       = true;     // master switch
+input bool     _AlertOnDev2        = true;     // alert on Dev2 touch (inner narrow line)
+input bool     _AlertOnDev3        = true;     // alert on Dev3 touch (deep in wide band)
+input bool     _AlertOnUpper       = true;     // upper-side alerts
+input bool     _AlertOnLower       = true;     // lower-side alerts
+input bool     _AlertPopup         = true;     // MT5 popup window
+input bool     _AlertPrintLog      = true;     // structured line into Experts log
+input bool     _AlertGlobalVar     = true;     // expose info via Global Variables
+input int      _AlertTriggerMode   = 1;        // 0 = on tick (instant), 1 = on bar close (clean)
+
 //+------------------------------------------------------------------+
 //| Buffers                                                          |
 //+------------------------------------------------------------------+
@@ -119,8 +130,21 @@ double FillUO_A[], FillUO_B[];   // fill upper outer  (Dev2U .. Dev3U)
 double FillLI_A[], FillLI_B[];   // fill lower inner  (Dev1L .. Dev2L)
 double FillLO_A[], FillLO_B[];   // fill lower outer  (Dev2L .. Dev3L)
 
+//--- hidden buffer for EA access via iCustom().
+//    Values: 0 = no signal,
+//            1 = Dev2 upper touch, 2 = Dev3 upper touch,
+//           -1 = Dev2 lower touch,-2 = Dev3 lower touch
+double SignalBuffer[];
+
 const string OBJ_PREFIX     = "GOLDY_REG_FUTURE_";
 const string COUNTDOWN_OBJ  = "GOLDY_CANDLE_COUNTDOWN";
+
+//--- alert state ("armed" = ready to fire, false = waiting for reset)
+bool     g_armedDev2U     = true;
+bool     g_armedDev3U     = true;
+bool     g_armedDev2L     = true;
+bool     g_armedDev3L     = true;
+datetime g_lastCheckedBar = 0;
 
 //+------------------------------------------------------------------+
 //| Initialization                                                   |
@@ -143,6 +167,7 @@ int OnInit()
    SetIndexBuffer(12, FillLI_B,  INDICATOR_DATA);
    SetIndexBuffer(13, FillLO_A,  INDICATOR_DATA);
    SetIndexBuffer(14, FillLO_B,  INDICATOR_DATA);
+   SetIndexBuffer(15, SignalBuffer, INDICATOR_CALCULATIONS);  // hidden, EA-readable
 
    //--- apply colors from inputs (overrides #property defaults)
    PlotIndexSetInteger(0, PLOT_LINE_COLOR, _RegressionColor1);     // Center
@@ -253,6 +278,10 @@ int OnCalculate(const int rates_total,
       FillLO_A[i] = EMPTY_VALUE;  FillLO_B[i] = EMPTY_VALUE;
    }
 
+   //--- initialize signal buffer to 0 only on first run; later calls keep history
+   if(prev_calculated == 0)
+      ArrayInitialize(SignalBuffer, 0.0);
+
    //--- fit the polynomial via normal equations + Gauss elimination
    double coeffs[];
    ArrayResize(coeffs, degree + 1);
@@ -299,6 +328,10 @@ int OnCalculate(const int rates_total,
 
    if(_ShowCountdown)
       UpdateCountdown();
+
+   //--- check & fire alerts (also writes to SignalBuffer for EA access)
+   if(_AlertEnabled)
+      ProcessAlerts(rates_total, time, high, low, close);
 
    return rates_total;
 }
@@ -365,6 +398,139 @@ void UpdateCountdown()
    ObjectSetString (0, COUNTDOWN_OBJ, OBJPROP_TEXT,     fullMsg);
 
    Comment(msg + " left to bar end");
+}
+
+//+------------------------------------------------------------------+
+//| Alerts - Variante E: 1x per approach, reset when price returns   |
+//+------------------------------------------------------------------+
+void ProcessAlerts(const int rates_total, const datetime &time[],
+                   const double &high[], const double &low[],
+                   const double &close[])
+{
+   if(rates_total < 3) return;
+
+   double upperPrice, lowerPrice;
+   datetime checkTime;
+   int barIdx;
+
+   if(_AlertTriggerMode == 0)
+   {
+      //--- tick mode: use current Bid against current bar's bands
+      barIdx     = rates_total - 1;
+      double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      upperPrice = bid;
+      lowerPrice = bid;
+      checkTime  = TimeCurrent();
+   }
+   else
+   {
+      //--- bar-close mode: only check when last closed bar changes
+      barIdx                = rates_total - 2;
+      datetime closedBarTime = time[barIdx];
+      if(closedBarTime == g_lastCheckedBar) return;
+      g_lastCheckedBar      = closedBarTime;
+      upperPrice            = high[barIdx];
+      lowerPrice            = low[barIdx];
+      checkTime             = closedBarTime;
+   }
+
+   double dev2u = Dev2U[barIdx];
+   double dev3u = Dev3U[barIdx];
+   double dev2l = Dev2L[barIdx];
+   double dev3l = Dev3L[barIdx];
+
+   //--- upper-side checks
+   if(_AlertOnUpper)
+   {
+      if(_AlertOnDev2 && dev2u != EMPTY_VALUE)
+      {
+         if(g_armedDev2U && upperPrice >= dev2u)
+         {
+            FireAlert("Dev2 Upper", dev2u, upperPrice, checkTime, 1, barIdx);
+            g_armedDev2U = false;
+         }
+         else if(!g_armedDev2U && upperPrice < dev2u)
+            g_armedDev2U = true;
+      }
+      if(_AlertOnDev3 && dev3u != EMPTY_VALUE)
+      {
+         if(g_armedDev3U && upperPrice >= dev3u)
+         {
+            FireAlert("Dev3 Upper", dev3u, upperPrice, checkTime, 2, barIdx);
+            g_armedDev3U = false;
+         }
+         else if(!g_armedDev3U && upperPrice < dev3u)
+            g_armedDev3U = true;
+      }
+   }
+
+   //--- lower-side checks
+   if(_AlertOnLower)
+   {
+      if(_AlertOnDev2 && dev2l != EMPTY_VALUE)
+      {
+         if(g_armedDev2L && lowerPrice <= dev2l)
+         {
+            FireAlert("Dev2 Lower", dev2l, lowerPrice, checkTime, -1, barIdx);
+            g_armedDev2L = false;
+         }
+         else if(!g_armedDev2L && lowerPrice > dev2l)
+            g_armedDev2L = true;
+      }
+      if(_AlertOnDev3 && dev3l != EMPTY_VALUE)
+      {
+         if(g_armedDev3L && lowerPrice <= dev3l)
+         {
+            FireAlert("Dev3 Lower", dev3l, lowerPrice, checkTime, -2, barIdx);
+            g_armedDev3L = false;
+         }
+         else if(!g_armedDev3L && lowerPrice > dev3l)
+            g_armedDev3L = true;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Fire a single alert through all configured channels              |
+//+------------------------------------------------------------------+
+void FireAlert(string bandName, double bandValue, double price,
+               datetime t, int signalCode, int barIdx)
+{
+   string symbol  = _Symbol;
+   string period  = StringSubstr(EnumToString(_Period), 7);   // strip "PERIOD_"
+   int    digits  = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   string priceS  = DoubleToString(price,     digits);
+   string bandS   = DoubleToString(bandValue, digits);
+   string dirWord = (signalCode > 0) ? "ueber" : "unter";
+
+   //--- 1) human-readable popup
+   string text = StringFormat("%s %s: Preis %s %s bei %s",
+                              symbol, period, dirWord, bandName, priceS);
+   if(_AlertPopup)
+      Alert(text);
+
+   //--- 2) machine-readable structured log line
+   if(_AlertPrintLog)
+   {
+      Print(StringFormat("GOLDY_SIGNAL|%s|%s|%s|%d|%s|%s|%s",
+            symbol, period, bandName, signalCode,
+            priceS, bandS,
+            TimeToString(t, TIME_DATE | TIME_SECONDS)));
+   }
+
+   //--- 3) global variables for live EA access
+   if(_AlertGlobalVar)
+   {
+      string prefix = "Goldy_" + symbol + "_" + period + "_";
+      GlobalVariableSet(prefix + "LastSignal",      (double)signalCode);
+      GlobalVariableSet(prefix + "LastSignalTime",  (double)t);
+      GlobalVariableSet(prefix + "LastSignalPrice", price);
+      GlobalVariableSet(prefix + "LastBandValue",   bandValue);
+   }
+
+   //--- 4) signal buffer (history readable via iCustom)
+   if(barIdx >= 0 && barIdx < ArraySize(SignalBuffer))
+      SignalBuffer[barIdx] = (double)signalCode;
 }
 
 //+------------------------------------------------------------------+
