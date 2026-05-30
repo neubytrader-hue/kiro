@@ -81,24 +81,27 @@
 #property indicator_color11 C'48,0,0',C'48,0,0'
 
 //+------------------------------------------------------------------+
-//| Inputs                                                           |
+//| Inputs (same names and order as MT4 regression_mt4_v2_2)         |
 //+------------------------------------------------------------------+
-input datetime _FixedDate         = D'2024.01.01 00:00';   // start date if _UseFixedDate=true
-input int      _Period_           = 200;                   // number of bars in the window
-input int      _RegressionDegree  = 4;                     // polynomial degree (1..6)
-input double   _K_N_L_Dev         = 1.27;                  // sigma multiplier #1
-input double   _K_N_L_Dev2        = 1.618;                 // sigma multiplier #2
-input double   _K_N_L_Dev3        = 2.618;                 // sigma multiplier #3
-input color    _StdChannelColor   = clrGreen;              // (informational, kept for parity)
-input color    _RegressionColor1  = clrAqua;               // Dev1 + Center color
-input color    _RegressionColor2  = clrRed;                // Dev2 color
-input color    _RegressionColor3  = C'160,0,0';            // Dev3 color
-input color    _FillColor1        = C'0,0,48';             // fill between Dev1 and Dev2
-input color    _FillColor2        = C'48,0,0';             // fill between Dev2 and Dev3
-input bool     _CenterLine        = true;                  // draw center line
-input bool     _FutureCenterLine  = true;                  // extend center line into future
-input bool     _UseFixedDate      = false;                 // start regression from _FixedDate
-input int      _FutureBars        = 50;                    // bars to project into the future
+input datetime _FixedDate         = D'2024.01.01 00:00';
+input int      _Period_           = 200;
+input int      _RegressionDegree  = 4;
+input double   _K_N_L_Dev         = 1.27;
+input double   _K_N_L_Dev2        = 1.618;
+input double   _K_N_L_Dev3        = 2.618;
+input color    _StdChannelColor   = clrGreen;
+input color    _RegressionColor1  = clrAqua;
+input color    _RegressionColor2  = clrRed;
+input color    _RegressionColor3  = C'160,0,0';
+input color    _FillColor1        = C'0,0,48';
+input color    _FillColor2        = C'48,0,0';
+input bool     _CenterLine        = true;
+input bool     _FutureCenterLine  = true;
+input bool     _UseFixedDate      = false;
+
+//--- internal constant (MT5 needs an explicit length for the
+//    future projection; MT4 handled this differently)
+#define _FutureBars 50
 
 //+------------------------------------------------------------------+
 //| Buffers                                                          |
