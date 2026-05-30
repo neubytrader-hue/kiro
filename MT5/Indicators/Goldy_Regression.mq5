@@ -108,9 +108,14 @@ input int      _CountdownRightShift  = 4;       // bars right of current bar
 input string   _CountdownFont        = "Arial";
 
 //--- Alerts (extra feature) ---------------------------------------
+//   Three trigger levels (per side, upper/lower):
+//     Dev2 = inner narrow line             (sigma = _K_N_L_Dev2)
+//     Mid  = middle of the wide red band   (= (Dev2 + Dev3) / 2)
+//     Dev3 = outer edge of the wide band   (sigma = _K_N_L_Dev3)
 input bool     _AlertEnabled       = true;     // master switch
 input bool     _AlertOnDev2        = true;     // alert on Dev2 touch (inner narrow line)
-input bool     _AlertOnDev3        = true;     // alert on Dev3 touch (deep in wide band)
+input bool     _AlertOnMid         = true;     // alert at MIDDLE of wide red band
+input bool     _AlertOnDev3        = false;    // alert on Dev3 touch (outer edge)
 input bool     _AlertOnUpper       = true;     // upper-side alerts
 input bool     _AlertOnLower       = true;     // lower-side alerts
 input bool     _AlertPopup         = true;     // MT5 popup window
@@ -132,8 +137,8 @@ double FillLO_A[], FillLO_B[];   // fill lower outer  (Dev2L .. Dev3L)
 
 //--- hidden buffer for EA access via iCustom().
 //    Values: 0 = no signal,
-//            1 = Dev2 upper touch, 2 = Dev3 upper touch,
-//           -1 = Dev2 lower touch,-2 = Dev3 lower touch
+//            1 = Dev2 upper, 2 = Mid upper, 3 = Dev3 upper,
+//           -1 = Dev2 lower,-2 = Mid lower,-3 = Dev3 lower
 double SignalBuffer[];
 
 const string OBJ_PREFIX     = "GOLDY_REG_FUTURE_";
@@ -141,8 +146,10 @@ const string COUNTDOWN_OBJ  = "GOLDY_CANDLE_COUNTDOWN";
 
 //--- alert state ("armed" = ready to fire, false = waiting for reset)
 bool     g_armedDev2U     = true;
+bool     g_armedMidU      = true;
 bool     g_armedDev3U     = true;
 bool     g_armedDev2L     = true;
+bool     g_armedMidL      = true;
 bool     g_armedDev3L     = true;
 datetime g_lastCheckedBar = 0;
 
