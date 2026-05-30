@@ -174,6 +174,10 @@ int OnInit()
    IndicatorSetString(INDICATOR_SHORTNAME,
       StringFormat("Goldy Regression (P=%d, deg=%d)", _Period_, _RegressionDegree));
 
+   //--- 1-second timer so the candle countdown ticks smoothly
+   if(_ShowCountdown)
+      EventSetTimer(1);
+
    return INIT_SUCCEEDED;
 }
 
@@ -182,7 +186,20 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   EventKillTimer();
    DeleteFutureObjects();
+   ObjectDelete(0, COUNTDOWN_OBJ);
+   if(reason == REASON_REMOVE || reason == REASON_CHARTCLOSE || reason == REASON_RECOMPILE)
+      Comment("");
+}
+
+//+------------------------------------------------------------------+
+//| Timer event - updates the candle countdown every second          |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+   if(_ShowCountdown)
+      UpdateCountdown();
 }
 
 //+------------------------------------------------------------------+
