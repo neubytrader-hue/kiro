@@ -58,24 +58,27 @@
 #property indicator_width7  1
 
 //--- Plot 7: Fill between Dev1U and Dev2U ------------------------
+//   DRAW_FILLING needs TWO colors (one for each ordering of the
+//   two buffers). We set the same color in both slots so the band
+//   is drawn regardless of which buffer is higher.
 #property indicator_label8  "Fill Upper Inner"
 #property indicator_type8   DRAW_FILLING
-#property indicator_color8  C'0,0,48'
+#property indicator_color8  C'0,0,48',C'0,0,48'
 
 //--- Plot 8: Fill between Dev2U and Dev3U ------------------------
 #property indicator_label9  "Fill Upper Outer"
 #property indicator_type9   DRAW_FILLING
-#property indicator_color9  C'48,0,0'
+#property indicator_color9  C'48,0,0',C'48,0,0'
 
 //--- Plot 9: Fill between Dev1L and Dev2L ------------------------
 #property indicator_label10 "Fill Lower Inner"
 #property indicator_type10  DRAW_FILLING
-#property indicator_color10 C'0,0,48'
+#property indicator_color10 C'0,0,48',C'0,0,48'
 
 //--- Plot 10: Fill between Dev2L and Dev3L -----------------------
 #property indicator_label11 "Fill Lower Outer"
 #property indicator_type11  DRAW_FILLING
-#property indicator_color11 C'48,0,0'
+#property indicator_color11 C'48,0,0',C'48,0,0'
 
 //+------------------------------------------------------------------+
 //| Inputs                                                           |
