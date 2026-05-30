@@ -446,6 +446,12 @@ void ProcessAlerts(const int rates_total, const datetime &time[],
    double dev2l = Dev2L[barIdx];
    double dev3l = Dev3L[barIdx];
 
+   //--- Mid = midpoint of Dev2 and Dev3 (middle of the wide red band)
+   double midU = (dev2u != EMPTY_VALUE && dev3u != EMPTY_VALUE)
+                 ? (dev2u + dev3u) / 2.0 : EMPTY_VALUE;
+   double midL = (dev2l != EMPTY_VALUE && dev3l != EMPTY_VALUE)
+                 ? (dev2l + dev3l) / 2.0 : EMPTY_VALUE;
+
    //--- upper-side checks
    if(_AlertOnUpper)
    {
@@ -459,11 +465,21 @@ void ProcessAlerts(const int rates_total, const datetime &time[],
          else if(!g_armedDev2U && upperPrice < dev2u)
             g_armedDev2U = true;
       }
+      if(_AlertOnMid && midU != EMPTY_VALUE)
+      {
+         if(g_armedMidU && upperPrice >= midU)
+         {
+            FireAlert("Mid Upper", midU, upperPrice, checkTime, 2, barIdx);
+            g_armedMidU = false;
+         }
+         else if(!g_armedMidU && upperPrice < midU)
+            g_armedMidU = true;
+      }
       if(_AlertOnDev3 && dev3u != EMPTY_VALUE)
       {
          if(g_armedDev3U && upperPrice >= dev3u)
          {
-            FireAlert("Dev3 Upper", dev3u, upperPrice, checkTime, 2, barIdx);
+            FireAlert("Dev3 Upper", dev3u, upperPrice, checkTime, 3, barIdx);
             g_armedDev3U = false;
          }
          else if(!g_armedDev3U && upperPrice < dev3u)
@@ -484,11 +500,21 @@ void ProcessAlerts(const int rates_total, const datetime &time[],
          else if(!g_armedDev2L && lowerPrice > dev2l)
             g_armedDev2L = true;
       }
+      if(_AlertOnMid && midL != EMPTY_VALUE)
+      {
+         if(g_armedMidL && lowerPrice <= midL)
+         {
+            FireAlert("Mid Lower", midL, lowerPrice, checkTime, -2, barIdx);
+            g_armedMidL = false;
+         }
+         else if(!g_armedMidL && lowerPrice > midL)
+            g_armedMidL = true;
+      }
       if(_AlertOnDev3 && dev3l != EMPTY_VALUE)
       {
          if(g_armedDev3L && lowerPrice <= dev3l)
          {
-            FireAlert("Dev3 Lower", dev3l, lowerPrice, checkTime, -2, barIdx);
+            FireAlert("Dev3 Lower", dev3l, lowerPrice, checkTime, -3, barIdx);
             g_armedDev3L = false;
          }
          else if(!g_armedDev3L && lowerPrice > dev3l)
