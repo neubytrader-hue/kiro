@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
-//|                                          Regression_MT5_v2_2.mq5 |
+//|                                              Goldy_Regression.mq5|
 //|                                                                  |
-//|   Polynomial regression channel for MetaTrader 5                 |
+//|   Goldy Regression - Polynomial regression channel for MT5       |
 //|   Ported from the MT4 version "regression_mt4_v2_2".             |
 //|                                                                  |
 //|   - Polynomial regression of configurable degree (default 4)     |
@@ -10,8 +10,8 @@
 //|   - Optional center line (with optional future projection)       |
 //|   - Optional fixed start date for the regression window          |
 //+------------------------------------------------------------------+
-#property copyright "Ported from MT4 regression_mt4_v2_2"
-#property version   "2.20"
+#property copyright "Goldy Regression"
+#property version   "1.00"
 #property strict
 #property indicator_chart_window
 #property indicator_buffers 15
@@ -109,7 +109,7 @@ double FillUO_A[], FillUO_B[];   // fill upper outer  (Dev2U .. Dev3U)
 double FillLI_A[], FillLI_B[];   // fill lower inner  (Dev1L .. Dev2L)
 double FillLO_A[], FillLO_B[];   // fill lower outer  (Dev2L .. Dev3L)
 
-const string OBJ_PREFIX = "REG_FUTURE_";
+const string OBJ_PREFIX = "GOLDY_REG_FUTURE_";
 
 //+------------------------------------------------------------------+
 //| Initialization                                                   |
@@ -143,12 +143,12 @@ int OnInit()
    PlotIndexSetInteger(6, PLOT_LINE_COLOR, _RegressionColor3);     // Dev3L
 
    //--- DRAW_FILLING uses two color slots; set both to the fill color
-   PlotIndexSetInteger(7, PLOT_LINE_COLOR, 0, _FillColor1);
-   PlotIndexSetInteger(7, PLOT_LINE_COLOR, 1, _FillColor1);
-   PlotIndexSetInteger(8, PLOT_LINE_COLOR, 0, _FillColor2);
-   PlotIndexSetInteger(8, PLOT_LINE_COLOR, 1, _FillColor2);
-   PlotIndexSetInteger(9, PLOT_LINE_COLOR, 0, _FillColor1);
-   PlotIndexSetInteger(9, PLOT_LINE_COLOR, 1, _FillColor1);
+   PlotIndexSetInteger(7,  PLOT_LINE_COLOR, 0, _FillColor1);
+   PlotIndexSetInteger(7,  PLOT_LINE_COLOR, 1, _FillColor1);
+   PlotIndexSetInteger(8,  PLOT_LINE_COLOR, 0, _FillColor2);
+   PlotIndexSetInteger(8,  PLOT_LINE_COLOR, 1, _FillColor2);
+   PlotIndexSetInteger(9,  PLOT_LINE_COLOR, 0, _FillColor1);
+   PlotIndexSetInteger(9,  PLOT_LINE_COLOR, 1, _FillColor1);
    PlotIndexSetInteger(10, PLOT_LINE_COLOR, 0, _FillColor2);
    PlotIndexSetInteger(10, PLOT_LINE_COLOR, 1, _FillColor2);
 
@@ -161,7 +161,7 @@ int OnInit()
       PlotIndexSetDouble(p, PLOT_EMPTY_VALUE, EMPTY_VALUE);
 
    IndicatorSetString(INDICATOR_SHORTNAME,
-      StringFormat("Regression(P=%d, deg=%d)", _Period_, _RegressionDegree));
+      StringFormat("Goldy Regression (P=%d, deg=%d)", _Period_, _RegressionDegree));
 
    return INIT_SUCCEEDED;
 }
