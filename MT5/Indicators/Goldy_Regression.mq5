@@ -4,38 +4,38 @@
 //|   Goldy Regression - Polynomial regression channel for MT5       |
 //|   Ported from the MT4 version "regression_mt4_v2_2".             |
 //|                                                                  |
-//|   v2.00:                                                         |
-//|     - Removed all colored fills (lines only now)                 |
-//|     - Center hardcoded to Gold dotted, width 2                   |
-//|     - All lines width 2                                          |
-//|     - Dev3 Upper (Short)  = bright red                           |
-//|     - Dev3 Lower (Long)   = bright lime green                    |
+//|   v2.10:                                                         |
+//|     - Lines only (no colored fills)                              |
+//|     - Center hardcoded Gold dotted, width 1                      |
+//|     - Dev1 Aqua, width 1                                         |
+//|     - Dev2 bright Red, width 2                                   |
+//|     - Dev3 Upper + Lower bright Red, width 2 (symmetric)         |
 //|     - Includes Candle Countdown + configurable Alerts            |
 //+------------------------------------------------------------------+
 #property copyright "Goldy Regression"
-#property version   "2.00"
+#property version   "2.10"
 #property strict
 #property indicator_chart_window
 #property indicator_buffers 8
 #property indicator_plots   7
 
-//--- Plot 0: Center line (HARDCODED Gold, dotted, width 2)
+//--- Plot 0: Center line (HARDCODED Gold, dotted, width 1)
 #property indicator_label1  "Center"
 #property indicator_type1   DRAW_LINE
 #property indicator_color1  clrGold
 #property indicator_style1  STYLE_DOT
-#property indicator_width1  2
+#property indicator_width1  1
 
-//--- Plot 1/2: Dev1 (1.27 sigma) - Aqua
+//--- Plot 1/2: Dev1 (1.27 sigma) - Aqua, width 1
 #property indicator_label2  "Dev1 Upper"
 #property indicator_type2   DRAW_LINE
 #property indicator_color2  clrAqua
-#property indicator_width2  2
+#property indicator_width2  1
 
 #property indicator_label3  "Dev1 Lower"
 #property indicator_type3   DRAW_LINE
 #property indicator_color3  clrAqua
-#property indicator_width3  2
+#property indicator_width3  1
 
 //--- Plot 3/4: Dev2 (1.618 sigma) - bright Red
 #property indicator_label4  "Dev2 Upper"
@@ -48,16 +48,16 @@
 #property indicator_color5  clrRed
 #property indicator_width5  2
 
-//--- Plot 5: Dev3 Upper (2.618 sigma) - bright Red (Short)
+//--- Plot 5: Dev3 Upper (2.618 sigma) - bright Red, width 2
 #property indicator_label6  "Dev3 Upper"
 #property indicator_type6   DRAW_LINE
 #property indicator_color6  clrRed
 #property indicator_width6  2
 
-//--- Plot 6: Dev3 Lower (2.618 sigma) - bright Lime green (Long)
+//--- Plot 6: Dev3 Lower (2.618 sigma) - bright Red, width 2
 #property indicator_label7  "Dev3 Lower"
 #property indicator_type7   DRAW_LINE
-#property indicator_color7  clrLime
+#property indicator_color7  clrRed
 #property indicator_width7  2
 
 //+------------------------------------------------------------------+
@@ -72,8 +72,8 @@ input double   _K_N_L_Dev3             = 2.618;
 input color    _StdChannelColor        = clrGreen;     // (informational, kept for parity)
 input color    _RegressionColor1       = clrAqua;      // Dev1 color (upper + lower)
 input color    _RegressionColor2       = clrRed;       // Dev2 color (upper + lower, bright red)
-input color    _RegressionColor3       = clrRed;       // Dev3 UPPER color (Short, bright red)
-input color    _RegressionColor3Lower  = clrLime;      // Dev3 LOWER color (Long, bright lime green)
+input color    _RegressionColor3       = clrRed;       // Dev3 UPPER color (bright red)
+input color    _RegressionColor3Lower  = clrRed;       // Dev3 LOWER color (bright red - symmetric to upper)
 input bool     _CenterLine             = true;
 input bool     _FutureCenterLine       = true;         // master toggle: extend ALL lines into the future
 input bool     _UseFixedDate           = false;
@@ -588,14 +588,15 @@ void DrawFutureBands(const double &coeffs[], int degree, int n, double stddev,
    string labels[];   ArrayResize(labels, 7);
    color  colors[];   ArrayResize(colors, 7);
    int    styles[];   ArrayResize(styles, 7);
+   int    widths[];   ArrayResize(widths, 7);
 
-   labels[0]="CENTER"; colors[0]=clrGold;                 styles[0]=STYLE_DOT;
-   labels[1]="D1U";    colors[1]=_RegressionColor1;       styles[1]=STYLE_SOLID;
-   labels[2]="D1L";    colors[2]=_RegressionColor1;       styles[2]=STYLE_SOLID;
-   labels[3]="D2U";    colors[3]=_RegressionColor2;       styles[3]=STYLE_SOLID;
-   labels[4]="D2L";    colors[4]=_RegressionColor2;       styles[4]=STYLE_SOLID;
-   labels[5]="D3U";    colors[5]=_RegressionColor3;       styles[5]=STYLE_SOLID;
-   labels[6]="D3L";    colors[6]=_RegressionColor3Lower;  styles[6]=STYLE_SOLID;
+   labels[0]="CENTER"; colors[0]=clrGold;                 styles[0]=STYLE_DOT;   widths[0]=1;
+   labels[1]="D1U";    colors[1]=_RegressionColor1;       styles[1]=STYLE_SOLID; widths[1]=1;
+   labels[2]="D1L";    colors[2]=_RegressionColor1;       styles[2]=STYLE_SOLID; widths[2]=1;
+   labels[3]="D2U";    colors[3]=_RegressionColor2;       styles[3]=STYLE_SOLID; widths[3]=2;
+   labels[4]="D2L";    colors[4]=_RegressionColor2;       styles[4]=STYLE_SOLID; widths[4]=2;
+   labels[5]="D3U";    colors[5]=_RegressionColor3;       styles[5]=STYLE_SOLID; widths[5]=2;
+   labels[6]="D3L";    colors[6]=_RegressionColor3Lower;  styles[6]=STYLE_SOLID; widths[6]=2;
 
    for(int k = 1; k <= _FutureBars; k++)
    {
@@ -616,7 +617,7 @@ void DrawFutureBands(const double &coeffs[], int degree, int n, double stddev,
       for(int s = sStart; s < 7; s++)
          DrawFutureSegment(labels[s] + "_" + IntegerToString(k),
                            prevT, prev[s], tv, curr[s],
-                           colors[s], (ENUM_LINE_STYLE)styles[s]);
+                           colors[s], (ENUM_LINE_STYLE)styles[s], widths[s]);
 
       prevT = tv;
       for(int s = 0; s < 7; s++) prev[s] = curr[s];
@@ -626,7 +627,7 @@ void DrawFutureBands(const double &coeffs[], int degree, int n, double stddev,
 //+------------------------------------------------------------------+
 void DrawFutureSegment(string suffix, datetime t1, double p1,
                        datetime t2, double p2,
-                       color c, ENUM_LINE_STYLE style)
+                       color c, ENUM_LINE_STYLE style, int width)
 {
    string name = OBJ_PREFIX + suffix;
    if(ObjectFind(0, name) < 0)
@@ -638,7 +639,7 @@ void DrawFutureSegment(string suffix, datetime t1, double p1,
    }
    ObjectSetInteger(0, name, OBJPROP_COLOR,      c);
    ObjectSetInteger(0, name, OBJPROP_STYLE,      style);
-   ObjectSetInteger(0, name, OBJPROP_WIDTH,      2);          // match indicator width 2
+   ObjectSetInteger(0, name, OBJPROP_WIDTH,      width);          // match indicator width 2
    ObjectSetInteger(0, name, OBJPROP_RAY_LEFT,   false);
    ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT,  false);
    ObjectSetInteger(0, name, OBJPROP_BACK,       false);
