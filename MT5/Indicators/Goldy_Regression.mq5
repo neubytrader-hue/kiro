@@ -330,8 +330,8 @@ int OnCalculate(const int rates_total,
 
    //--- future projection of the center line (chart objects)
    DeleteFutureObjects();
-   if(_CenterLine && _FutureCenterLine && _FutureBars > 0)
-      DrawFutureCenterLine(coeffs, degree, n, time, rates_total);
+   if(_FutureCenterLine && _FutureBars > 0)
+      DrawFutureBands(coeffs, degree, n, stddev, time, rates_total);
 
    if(_ShowCountdown)
       UpdateCountdown();
@@ -668,6 +668,97 @@ double EvalPoly(const double &coeffs[], int degree, double x)
 //+------------------------------------------------------------------+
 //| Draw center-line projection into the future via OBJ_TREND        |
 //+------------------------------------------------------------------+
+//| Draw center + all 6 deviation bands into the future via OBJ_TREND|
+//+------------------------------------------------------------------+
+void DrawFutureBands(const double &coeffs[], int degree, int n, double stddev,
+                     const datetime &time[], int rates_total)
+{
+   int barSeconds = PeriodSeconds(_Period);
+   if(barSeconds <= 0) return;
+
+   datetime t0 = time[rates_total - 1];
+
+   //--- starting point at xn = 1.0 (= last bar)
+   double pc = EvalPoly(coeffs, degree, 1.0);
+   double prev[7];
+   prev[0] = pc;                          // Center
+   prev[1] = pc + _K_N_L_Dev  * stddev;   // Dev1U
+   prev[2] = pc - _K_N_L_Dev  * stddev;   // Dev1L
+   prev[3] = pc + _K_N_L_Dev2 * stddev;   // Dev2U
+   prev[4] = pc - _K_N_L_Dev2 * stddev;   // Dev2L
+   prev[5] = pc + _K_N_L_Dev3 * stddev;   // Dev3U
+   prev[6] = pc - _K_N_L_Dev3 * stddev;   // Dev3L
+   datetime prevT = t0;
+
+   //--- styling per line
+   string labels[];   ArrayResize(labels, 7);
+   color  colors[];   ArrayResize(colors, 7);
+   int    styles[];   ArrayResize(styles, 7);
+
+   labels[0]="CENTER"; colors[0]=_RegressionColor1; styles[0]=STYLE_DOT;
+   labels[1]="D1U";    colors[1]=_RegressionColor1; styles[1]=STYLE_SOLID;
+   labels[2]="D1L";    colors[2]=_RegressionColor1; styles[2]=STYLE_SOLID;
+   labels[3]="D2U";    colors[3]=_RegressionColor2; styles[3]=STYLE_SOLID;
+   labels[4]="D2L";    colors[4]=_RegressionColor2; styles[4]=STYLE_SOLID;
+   labels[5]="D3U";    colors[5]=_RegressionColor3; styles[5]=STYLE_SOLID;
+   labels[6]="D3L";    colors[6]=_RegressionColor3; styles[6]=STYLE_SOLID;
+
+   //--- loop forward and draw segments between consecutive future bars
+   for(int k = 1; k <= _FutureBars; k++)
+   {
+      double xn   = 1.0 + (double)k / (double)((n > 1) ? (n - 1) : 1);
+      double y    = EvalPoly(coeffs, degree, xn);
+      datetime tv = (datetime)(t0 + (long)barSeconds * (long)k);
+
+      double curr[7];
+      curr[0] = y;
+      curr[1] = y + _K_N_L_Dev  * stddev;
+      curr[2] = y - _K_N_L_Dev  * stddev;
+      curr[3] = y + _K_N_L_Dev2 * stddev;
+      curr[4] = y - _K_N_L_Dev2 * stddev;
+      curr[5] = y + _K_N_L_Dev3 * stddev;
+      curr[6] = y - _K_N_L_Dev3 * stddev;
+
+      //--- center is optional (respect _CenterLine flag)
+      int sStart = _CenterLine ? 0 : 1;
+      for(int s = sStart; s < 7; s++)
+         DrawFutureSegment(labels[s] + "_" + IntegerToString(k),
+                           prevT, prev[s], tv, curr[s],
+                           colors[s], (ENUM_LINE_STYLE)styles[s]);
+
+      prevT = tv;
+      for(int s = 0; s < 7; s++) prev[s] = curr[s];
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Helper: create or move a single OBJ_TREND segment                |
+//+------------------------------------------------------------------+
+void DrawFutureSegment(string suffix, datetime t1, double p1,
+                       datetime t2, double p2,
+                       color c, ENUM_LINE_STYLE style)
+{
+   string name = OBJ_PREFIX + suffix;
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_TREND, 0, t1, p1, t2, p2);
+   else
+   {
+      ObjectMove(0, name, 0, t1, p1);
+      ObjectMove(0, name, 1, t2, p2);
+   }
+   ObjectSetInteger(0, name, OBJPROP_COLOR,      c);
+   ObjectSetInteger(0, name, OBJPROP_STYLE,      style);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH,      1);
+   ObjectSetInteger(0, name, OBJPROP_RAY_LEFT,   false);
+   ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT,  false);
+   ObjectSetInteger(0, name, OBJPROP_BACK,       false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN,     true);
+}
+
+//+------------------------------------------------------------------+
+//| (Legacy) Draw only the center line into the future               |
+//+------------------------------------------------------------------+
 void DrawFutureCenterLine(const double &coeffs[], int degree, int n,
                           const datetime &time[], int rates_total)
 {
@@ -684,22 +775,9 @@ void DrawFutureCenterLine(const double &coeffs[], int degree, int n,
       double   yval = EvalPoly(coeffs, degree, xn);
       datetime tval = (datetime)(t0 + (long)barSeconds * (long)k);
 
-      string name = OBJ_PREFIX + IntegerToString(k);
-      if(ObjectFind(0, name) < 0)
-         ObjectCreate(0, name, OBJ_TREND, 0, prevT, prevY, tval, yval);
-      else
-      {
-         ObjectMove(0, name, 0, prevT, prevY);
-         ObjectMove(0, name, 1, tval,  yval);
-      }
-      ObjectSetInteger(0, name, OBJPROP_COLOR,      _RegressionColor1);
-      ObjectSetInteger(0, name, OBJPROP_STYLE,      STYLE_DOT);
-      ObjectSetInteger(0, name, OBJPROP_WIDTH,      1);
-      ObjectSetInteger(0, name, OBJPROP_RAY_LEFT,   false);
-      ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT,  false);
-      ObjectSetInteger(0, name, OBJPROP_BACK,       false);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, name, OBJPROP_HIDDEN,     true);
+      DrawFutureSegment("CENTER_" + IntegerToString(k),
+                        prevT, prevY, tval, yval,
+                        _RegressionColor1, STYLE_DOT);
 
       prevT = tval;
       prevY = yval;
