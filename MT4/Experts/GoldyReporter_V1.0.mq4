@@ -1,12 +1,12 @@
 //+------------------------------------------------------------------+
-//|                        TelegramPulseReporter V4.0                |
+//|                          GoldyReporter V1.0                      |
 //|                             Copyright 2026, Neubytrader          |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Neubytrader"
 #property link      "https://t.me/Neubytrader"
-#property version   "4.0"
+#property version   "1.0"
 #property strict
-#property description "V4.0 NoBonus - Telegram Pulse Reporter"
+#property description "Goldy Reporter V1.0"
 #property description "Telegram-Bot | Remote-Control | Scheduler | Tages-/Wochenberichte"
 #property description "Drawdown-Monitor | Tagesziele | Live-Dashboard | Mute-Funktion"
 #property description "Support: https://t.me/Neubytrader"
@@ -168,18 +168,18 @@ return liste;
 }
 void LadeGesendeteTickets() {
 TPR_sentOpen = "";
-int h1 = FileOpen(StringFormat("tpulse%s_open.dat", g_FileSuffix), FILE_BIN|FILE_READ);
+int h1 = FileOpen(StringFormat("goldy%s_open.dat", g_FileSuffix), FILE_BIN|FILE_READ);
 if(h1 != INVALID_HANDLE) { TPR_sentOpen = FileReadString(h1, -1); FileClose(h1); }
 if(StringLen(TPR_sentOpen) > 0 && StringSubstr(TPR_sentOpen, StringLen(TPR_sentOpen)-1, 1) != ",") TPR_sentOpen += ",";
 TPR_sentClosed = "";
-int h2 = FileOpen(StringFormat("tpulse%s_closed.dat", g_FileSuffix), FILE_BIN|FILE_READ);
+int h2 = FileOpen(StringFormat("goldy%s_closed.dat", g_FileSuffix), FILE_BIN|FILE_READ);
 if(h2 != INVALID_HANDLE) { TPR_sentClosed = FileReadString(h2, -1); FileClose(h2); }
 if(StringLen(TPR_sentClosed) > 0 && StringSubstr(TPR_sentClosed, StringLen(TPR_sentClosed)-1, 1) != ",") TPR_sentClosed += ",";
 }
 void SpeichereGesendeteTickets() {
-int h1 = FileOpen(StringFormat("tpulse%s_open.dat", g_FileSuffix), FILE_BIN|FILE_WRITE);
+int h1 = FileOpen(StringFormat("goldy%s_open.dat", g_FileSuffix), FILE_BIN|FILE_WRITE);
 if(h1 != INVALID_HANDLE) { FileWriteString(h1, TPR_sentOpen, StringLen(TPR_sentOpen)); FileClose(h1); }
-int h2 = FileOpen(StringFormat("tpulse%s_closed.dat", g_FileSuffix), FILE_BIN|FILE_WRITE);
+int h2 = FileOpen(StringFormat("goldy%s_closed.dat", g_FileSuffix), FILE_BIN|FILE_WRITE);
 if(h2 != INVALID_HANDLE) { FileWriteString(h2, TPR_sentClosed, StringLen(TPR_sentClosed)); FileClose(h2); }
 }
 void VormerkenAlleHistorischenTrades() {
@@ -372,13 +372,13 @@ string lower = cmd;
 for(int i = 0; i < StringLen(lower); i++) { int c = StringGetCharacter(lower, i); if(c >= 'A' && c <= 'Z') StringSetCharacter(lower, i, c + 32); }
 Print("EMPFANGEN: Von ID=", fromID, " | Befehl=", lower);
 if(StringFind(fromID, Telegram_Erlaubte_UserID) < 0) { Print("BLOCKIERT: ID nicht erlaubt"); return; }
-if(lower == "off" || lower == "emergency" || lower == "stop") {
+if(lower == "off") {
 Print("AKTION: Setze AutoTrading OFF (manuelle Sperre aktiv)");
 manuellesSperreAktiv = true;
 SetAutoTradingState(false);
 SendeTelegramFotoURL(SessionOff_Bild_URL, "SESSION BEENDET\n" + ui_AccountName + "\n" + MSG_SEP + "⚠️ Manuell gesperrt - Scheduler pausiert.\nNaechste Session:\n" + GetNaechsteSessionInfo());
 }
-else if(lower == "on" || lower == "resume" || lower == "start") {
+else if(lower == "on") {
 Print("AKTION: Setze AutoTrading ON (manuelle Sperre aufgehoben)");
 manuellesSperreAktiv = false;
 SetAutoTradingState(true);
@@ -397,7 +397,7 @@ if(profit > 0) { tradesPlus++; profitPlus += profit; } else if(profit < 0) { tra
 int totalTrades = tradesPlus + tradesMinus;
 string autoStatus = TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) ? "ON" : "OFF";
 double drawdown = BerechneDrawdownVomTagesstart();
-string statusMsg = "PULSE REPORTER STATUS\n";
+string statusMsg = "GOLDY REPORTER STATUS\n";
 statusMsg += "Konto: " + ui_AccountName + "\nID: " + IntegerToString(AccountNumber()) + "\nAutoTrading: " + autoStatus + "\n";
 statusMsg += "------------------\nOffene Positionen: " + IntegerToString(totalTrades) + "\n";
 if(tradesPlus > 0) statusMsg += "Im Plus: " + IntegerToString(tradesPlus) + " (" + FormatGeld(profitPlus) + ")\n";
@@ -405,6 +405,40 @@ if(tradesMinus > 0) statusMsg += "Im Minus: " + IntegerToString(tradesMinus) + "
 statusMsg += "------------------\nDrawdown (Tagesstart): -" + DoubleToString(drawdown, 1) + "%\n";
 statusMsg += "Equity: " + FormatGeld(AccountEquity()) + " " + g_Währungssymbol + "\nBalance: " + FormatGeld(AccountBalance()) + " " + g_Währungssymbol + "\n\n" + GetZufaelligenSpruch();
 SendeTelegramText(statusMsg);
+}
+else if(lower == "closeall") {
+Print("AKTION: Schliesse alle manuellen Positionen");
+int closed = 0; int failed = 0; double totalPnL = 0.0;
+for(int i = OrdersTotal() - 1; i >= 0; i--) {
+if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+if(OrderMagicNumber() != 0) continue;
+if(OrderType() != OP_BUY && OrderType() != OP_SELL) continue;
+double price = (OrderType() == OP_BUY) ? MarketInfo(OrderSymbol(), MODE_BID) : MarketInfo(OrderSymbol(), MODE_ASK);
+double pnl = OrderProfit() + OrderSwap() + OrderCommission();
+if(OrderClose(OrderTicket(), OrderLots(), price, 10, clrRed)) { closed++; totalPnL += pnl; }
+else { failed++; Print("OrderClose Fehler bei Ticket ", OrderTicket(), ": ", GetLastError()); }
+}
+}
+string closeMsg = "CLOSEALL ausgefuehrt\n" + ui_AccountName + "\n" + MSG_SEP;
+closeMsg += "Geschlossen: " + IntegerToString(closed) + " manuelle Position(en)\n";
+if(failed > 0) closeMsg += "Fehlgeschlagen: " + IntegerToString(failed) + "\n";
+if(closed > 0) closeMsg += "Gesamt P/L: " + FormatGeld(totalPnL) + " " + g_Währungssymbol;
+else if(failed == 0) closeMsg += "Keine manuellen Positionen offen.";
+SendeTelegramText(closeMsg);
+}
+else if(lower == "b") {
+string help = "GOLDY REPORTER - BEFEHLE\n" + MSG_SEP;
+help += "Schaltet AutoTrading ein und hebt die manuelle Sperre auf.\n";
+help += "/on\n\n";
+help += "Stoppt AutoTrading sofort und sperrt den Scheduler.\n";
+help += "/off\n\n";
+help += "Sendet eine aktuelle Konto-Uebersicht.\n";
+help += "/status\n\n";
+help += "Schliesst sofort ALLE manuellen Positionen ohne Rueckfrage.\n";
+help += "/closeall\n\n";
+help += "Zeigt diese Befehls-Liste an.\n";
+help += "/b";
+SendeTelegramText(help);
 }
 }
 void SchedulerCheck() {
@@ -557,8 +591,8 @@ Comment(""); ObjectsDeleteAll(0, PFX); LadeGesendeteTickets(); VormerkenAlleHist
 ObjRect(PFX+"BG", 0, 0, PW+20, PH+20, CLR_BG, 0, true); ObjRect(PFX+"Glow", -5, -5, PW+30, PH+30, 0x1A1500, 0, true);
 ObjRect(PFX+"Border", 0, 0, PW+20, PH+20, CLR_GOLD, CLR_GOLD, false); ObjRect(PFX+"Inner", 2, 2, PW+16, PH+16, CLR_BG, 0, false);
 ObjRect(PFX+"Header", 2, 2, PW+16, 50, CLR_GOLD, CLR_GOLD, false);
-ObjLabel(PFX+"Title", 25, 15, "TELEGRAM PULSE REPORTER", 16, clrBlack, "Arial Black");
-ObjLabel(PFX+"Ver", PW-70, 15, "v4.0", 12, clrBlack, "Arial Bold");
+ObjLabel(PFX+"Title", 25, 15, "GOLDY REPORTER", 16, clrBlack, "Arial Black");
+ObjLabel(PFX+"Ver", PW-70, 15, "v1.0", 12, clrBlack, "Arial Bold");
 int y = 65;
 ObjLabel(PFX+"Lbl_Konto", COL_L, y, "KONTO-BEZEICHNUNG", 11, CLR_GOLD, "Arial Bold"); y += 22;
 ObjEdit(PFX+"Edit_Konto", COL_L, y, 300, 22, ui_AccountName, CLR_EDIT_BG, CLR_GREEN); y += 40;
@@ -583,10 +617,10 @@ equityStartTag = AccountEquity();
 ResetTagesStatistik();
 UpdateDynamicAreas();
 AktualisiereSchedulerPunkt();
-Print("Dashboard V4.0 geladen.");
+Print("Goldy Reporter V1.0 geladen.");
 int timerSec = MathMax(Fernsteuerung_Abfrage_Sekunden, 5);
 if(!EventSetTimer(timerSec)) { Print("FEHLER: Timer konnte nicht gesetzt werden!"); return INIT_FAILED; }
-SendeTelegramFotoURL(Startup_Bild_URL, "Pulse Reporter v4.0 aktiv: " + ui_AccountName + (StringLen(g_FileSuffix)>0 ? " | Konto: " + RoboForex_KontoNr : ""));
+SendeTelegramFotoURL(Startup_Bild_URL, "Goldy Reporter v1.0 aktiv: " + ui_AccountName + (StringLen(g_FileSuffix)>0 ? " | Konto: " + RoboForex_KontoNr : ""));
 return INIT_SUCCEEDED;
 }
 void OnDeinit(const int reason) {
