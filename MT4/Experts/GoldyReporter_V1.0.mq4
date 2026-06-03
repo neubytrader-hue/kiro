@@ -69,6 +69,8 @@ input bool     Benachrichtigung_Geschlossene_Trades = true;
 // === REMOTE CONTROL ===
 input bool     Fernsteuerung_Aktiv         = true;
 input int      Fernsteuerung_Abfrage_Sekunden = 5;
+input string   __CloseAll_Sicherheit       = "=== /CLOSEALL SICHERHEIT ===";
+input string   Haupt_EA_MagicNumbers       = "";  // Optional: MagicNumbers vom Haupt-EA, kommagetrennt (z.B. "8888" oder "8888,9999"). Diese Trades werden NIE geschlossen.
 //====================== GLOBALE VARIABLEN ===========================
 #define CLR_BG          0x121212
 #define CLR_PANEL       0x000000
@@ -335,6 +337,17 @@ int code = WebRequest("POST", url, "Content-Type: application/x-www-form-urlenco
 return (code == 200);
 }
 //====================== COMMAND CHECKER =============================
+bool IstHauptEAMagic(int magic) {
+if(StringLen(Haupt_EA_MagicNumbers) == 0) return false;
+string parts[];
+int count = StringSplit(Haupt_EA_MagicNumbers, ',', parts);
+for(int i = 0; i < count; i++) {
+string m = StringTrimLeft(StringTrimRight(parts[i]));
+if(StringLen(m) == 0) continue;
+if((int)StringToInteger(m) == magic) return true;
+}
+return false;
+}
 void CheckRemoteCommands() {
 if(!Fernsteuerung_Aktiv) return;
 if(TimeCurrent() - cmd_lastPoll < Fernsteuerung_Abfrage_Sekunden) return;
@@ -409,9 +422,12 @@ SendeTelegramText(statusMsg);
 else if(lower == "closeall") {
 Print("AKTION: Schliesse alle manuellen Positionen");
 int closed = 0; int failed = 0; double totalPnL = 0.0;
+double balanceBefore = AccountBalance();
 for(int i = OrdersTotal() - 1; i >= 0; i--) {
 if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-if(OrderMagicNumber() != 0) continue;
+int orderMagic = OrderMagicNumber();
+if(IstHauptEAMagic(orderMagic)) continue;
+if(orderMagic != 0) continue;
 if(OrderType() != OP_BUY && OrderType() != OP_SELL) continue;
 double price = (OrderType() == OP_BUY) ? MarketInfo(OrderSymbol(), MODE_BID) : MarketInfo(OrderSymbol(), MODE_ASK);
 double pnl = OrderProfit() + OrderSwap() + OrderCommission();
@@ -419,25 +435,66 @@ if(OrderClose(OrderTicket(), OrderLots(), price, 10, clrRed)) { closed++; totalP
 else { failed++; Print("OrderClose Fehler bei Ticket ", OrderTicket(), ": ", GetLastError()); }
 }
 }
-string closeMsg = "CLOSEALL ausgefuehrt\n" + ui_AccountName + "\n" + MSG_SEP;
+string closeMsg = "ALLE TRADES GESCHLOSSEN\n" + ui_AccountName + "\n" + MSG_SEP;
+if(closed == 0 && failed == 0) {
+closeMsg += "Keine manuellen Positionen offen.\n";
+closeMsg += "EA-Trades wurden NICHT angefasst.\n";
+closeMsg += "Balance: " + FormatGeld(AccountBalance()) + " " + g_Währungssymbol;
+} else {
 closeMsg += "Geschlossen: " + IntegerToString(closed) + " manuelle Position(en)\n";
-if(failed > 0) closeMsg += "Fehlgeschlagen: " + IntegerToString(failed) + "\n";
-if(closed > 0) closeMsg += "Gesamt P/L: " + FormatGeld(totalPnL) + " " + g_Währungssymbol;
-else if(failed == 0) closeMsg += "Keine manuellen Positionen offen.";
+if(failed > 0) closeMsg += "Konnten nicht geschlossen werden: " + IntegerToString(failed) + " Position(en)\n";
+string pnlLabel = "";
+if(totalPnL > 0) pnlLabel = " (Gewinn)";
+else if(totalPnL < 0) pnlLabel = " (Verlust)";
+double tradeDD = 0.0;
+if(totalPnL < 0 && balanceBefore > 0) tradeDD = (totalPnL / balanceBefore) * 100.0;
+closeMsg += "Trade P/L: " + FormatGeld(totalPnL) + " " + g_Währungssymbol + pnlLabel + "\n";
+closeMsg += "Trade-Drawdown: " + DoubleToString(tradeDD, 1) + "% von Balance\n";
+closeMsg += "Balance (neu): " + FormatGeld(AccountBalance()) + " " + g_Währungssymbol;
+}
 SendeTelegramText(closeMsg);
 }
+else if(lower == "drawdown") {
+int openCount = 0;
+double floatingPnL = 0.0;
+for(int i = 0; i < OrdersTotal(); i++) {
+if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+if(OrderType() == OP_BUY || OrderType() == OP_SELL) {
+openCount++;
+floatingPnL += OrderProfit() + OrderSwap() + OrderCommission();
+}
+}
+}
+string ddMsg = "DRAWDOWN\n" + ui_AccountName + "\n" + MSG_SEP;
+if(openCount == 0) {
+ddMsg += "Keine offenen Positionen.\n";
+ddMsg += "Balance: " + FormatGeld(AccountBalance()) + " " + g_Währungssymbol + "\n";
+ddMsg += "Equity: " + FormatGeld(AccountEquity()) + " " + g_Währungssymbol;
+} else {
+double bal = AccountBalance();
+double dd = 0.0;
+if(floatingPnL < 0 && bal > 0) dd = (floatingPnL / bal) * 100.0;
+ddMsg += "Offene Positionen: " + IntegerToString(openCount) + "\n";
+ddMsg += "Floating P/L: " + FormatGeld(floatingPnL) + " " + g_Währungssymbol + "\n";
+ddMsg += "Drawdown: " + DoubleToString(dd, 1) + "% von Balance\n";
+ddMsg += "Balance: " + FormatGeld(bal) + " " + g_Währungssymbol + "\n";
+ddMsg += "Equity: " + FormatGeld(AccountEquity()) + " " + g_Währungssymbol;
+}
+SendeTelegramFotoURL(Drawdown_Bild_URL, ddMsg);
+}
 else if(lower == "b") {
-string help = "GOLDY REPORTER - BEFEHLE\n" + MSG_SEP;
-help += "Schaltet AutoTrading ein und hebt die manuelle Sperre auf.\n";
+string help = "Befehle :\n";
+help += "b\n\n";
+help += "Metatrader AN :\n";
 help += "/on\n\n";
-help += "Stoppt AutoTrading sofort und sperrt den Scheduler.\n";
+help += "Metatrader AUS :\n";
 help += "/off\n\n";
-help += "Sendet eine aktuelle Konto-Uebersicht.\n";
+help += "Aktuelle Abfrage :\n";
 help += "/status\n\n";
-help += "Schliesst sofort ALLE manuellen Positionen ohne Rueckfrage.\n";
-help += "/closeall\n\n";
-help += "Zeigt diese Befehls-Liste an.\n";
-help += "/b";
+help += "Aktueller Drawdown :\n";
+help += "/drawdown\n\n";
+help += "Alle Trades Schließen :\n";
+help += "/closeall";
 SendeTelegramText(help);
 }
 }
