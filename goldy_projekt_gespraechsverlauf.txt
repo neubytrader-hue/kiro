@@ -1,0 +1,459 @@
+================================================================================
+GOLDY AI + GOLDY TRADER - PROJEKT GESPRAECHSVERLAUF
+================================================================================
+Erstellt: 05.06.2026
+Trader: Alex
+KI-Assistent: Max
+
+================================================================================
+1. PROJEKT-UEBERSICHT
+================================================================================
+
+Alex hat einen Trading-Indikator und tradet damit manuell mit gutem Erfolg
+(5 Tage ohne Verlust). Problem: Der Indikator gibt zu viele Signale.
+
+ZIEL: Zwei Expert Advisors (EAs) bauen, die zusammenarbeiten:
+
+1. GOLDY AI V 1.0
+   - Macht Screenshots vom Chart
+   - Schickt Bilder an OpenAI Vision (GPT-4o-mini)
+   - KI analysiert wie ein erfahrener Trader (filtert die Signale)
+   - Speichert Ergebnis in GlobalVariables fuer den Trader
+
+2. GOLDY TRADER V 1.0
+   - Liest Signale von der KI
+   - Fuehrt Trades automatisch aus (oder manuell per Telegram)
+   - Hat Dashboard, Scheduler, Filter, etc.
+
+================================================================================
+2. SYSTEM-ARCHITEKTUR (FINAL)
+================================================================================
+
+EIN VPS -> EIN MT5-Terminal (Roboforex Konto)
+   |
+   |-- Chart 1: GOLDY AI V 1.0
+   |      * Indikatoren VISUELL drauf:
+   |        - Goldy_Regression (Baender: Dev1, Dev2, Dev3)
+   |        - WaveIndicator (rote/gruene/weisse Kreise)
+   |      * EA macht Screenshots, schickt an OpenAI
+   |      * Hat Scheduler (steuert AutoTrading-Button)
+   |      * Sauber, ohne Dashboard (fuer KI-Analyse)
+   |
+   |-- Chart 2: GOLDY TRADER V 1.0
+          * Chart komplett SCHWARZ (keine Indikatoren visuell)
+          * EA liest Indikator-Daten via iCustom() im Hintergrund
+          * Komplettes Dashboard fuellt den Chart
+          * Fuehrt Trades aus
+          * Sendet Signale an oeffentliche Telegram-Gruppe
+
+KOMMUNIKATION zwischen den EAs: GlobalVariables (sofort, kostenlos)
+
+TELEGRAM:
+- Privater Chat: nur fuer Alex (Befehle, Status, Bilder)
+- Oeffentliche Gruppe: nur Text-Signale fuer Follower
+
+================================================================================
+3. TRADING-STRATEGIE (FINAL)
+================================================================================
+
+INDIKATOREN auf dem Chart:
+- Goldy_Regression: Polynomial Regression Channel mit 7 Linien
+  * Dev3 Upper (Rot) - aussen oben
+  * Dev2 Upper (Rot) - mittlere oben
+  * Dev1 Upper (Aqua) - innen oben
+  * Center (Gold gestrichelt) - Mitte
+  * Dev1 Lower (Aqua) - innen unten
+  * Dev2 Lower (Rot) - mittlere unten
+  * Dev3 Lower (Rot) - aussen unten
+
+- WaveIndicator: zeichnet Kreise basierend auf ZigZag
+  * Roter Kreis (oben) = SELL-Signal-Zone
+  * Gruener Kreis (unten) = BUY-Signal-Zone
+  * Weisser Kreis = Schliessen-Signal
+
+3-STUFEN-LOGIK:
+
+SELL-SETUP (Preis am Hoch, faellt runter):
+  Stufe 1 (Vorbereitung):  Roter Kreis erreicht Dev1 Upper (Aqua oben)
+                           -> Telegram: "Trade in Vorbereitung"
+  Stufe 2 (Nah dran):      Roter Kreis bei/ueber Dev2 Upper (Rot oben)
+                           -> Telegram: "Nah dran an finaler Nachricht"
+  Stufe 3 (FINAL):         3 ROTE Kerzen abwaerts nach Stufe 2
+                           -> Trade SELL oeffnen
+  Schliessen:              Gruener ODER weisser Kreis irgendwo
+
+BUY-SETUP (Preis am Tief, steigt hoch):
+  Stufe 1 (Vorbereitung):  Gruener Kreis erreicht Dev1 Lower (Aqua unten)
+  Stufe 2 (Nah dran):      Gruener Kreis bei/unter Dev2 Lower (Rot unten)
+  Stufe 3 (FINAL):         3 GRUENE Kerzen aufwaerts nach Stufe 2
+                           -> Trade BUY oeffnen
+  Schliessen:              Roter ODER weisser Kreis irgendwo
+
+WICHTIG zum Wave-Indikator (Repaint-Verhalten):
+- Es gibt nur EINEN Kreis pro Farbe gleichzeitig
+- Der Kreis WANDERT mit jedem neuen Hoch/Tief mit
+- Erst wenn der Preis stehen bleibt, ist der Kreis stabil = Signal echt
+- Wander-Stabilitaet: Kreis muss 2 Minuten stillstehen (einstellbar)
+
+================================================================================
+4. GOLDY AI V 1.0 - SPEZIFIKATION (FERTIG GESCHRIEBEN!)
+================================================================================
+
+STATUS: KOMPILIERT OHNE FEHLER!
+
+DATEIEN:
+- MQL5/Include/Goldy_AI_Helpers.mqh  (Hilfsfunktionen)
+- MQL5/Experts/Goldy_AI_V1.mq5       (Haupt-EA)
+
+FUNKTIONEN:
+* Screenshot alle 60 Sekunden (einstellbar)
+* Sendet Bild + Indikator-Daten an OpenAI Vision API
+* OpenAI GPT-4o-mini analysiert das Bild
+* Wander-Tracking: Beobachtet Kreis-Stabilitaet
+* Speichert in GlobalVariables fuer Trader-EA
+* Sendet Signale + Bilder an PRIVATEN Telegram-Chat
+* Telegram-Befehle: /trade, /screenshot, /status, /pause, /resume,
+  /modus_konservativ, /modus_normal, /modus_aggressiv, /zusatz <text>
+* Scheduler: Trading-Zeiten Mo-So + AutoTrading-Toggle via Windows API
+* Tageskosten-Tracker mit Limit
+* Lern-Bibliothek: speichert Bilder + Analysen
+* Heartbeat: taegliche Status-Nachricht
+* Chart wird automatisch optimiert (schwarz, sauber, fuer Screenshots)
+
+TECHNISCHE DETAILS:
+- Windows API mit "long" (MT5 ist 64-bit)
+- AutoTrading-Button-ID: 32851 (MT5)
+- Alle Strings nutzen CharToString() statt Escape-Sequenzen
+- Keine Emojis im Code (Encoding-Probleme)
+- JSON-Building mit dq/bs/nl Variablen
+
+EINGABE-PARAMETER:
+- OpenAI_ApiKey: Dein OpenAI-Schluessel
+- OpenAI_Modell: gpt-4o-mini (guenstig) oder gpt-4o
+- Telegram_BotToken: Dein Telegram Bot
+- Telegram_PrivatChatID: Dein Chat
+- Telegram_UserID: Deine User-ID (Sicherheit)
+- Screenshot_IntervalSek: 60
+- Wander_StabilMinuten: 2
+- Plan_Montag bis Plan_Sonntag: "10:00-20:00" usw.
+- AutoTrading_Toggeln: true (Scheduler steuert AT-Button)
+- TageskostenLimit_EUR: 5.0
+- Chart_AutoOptimieren: true
+- LernBib_Aktiv: true
+- Heartbeat_Zeit: 22:00
+
+================================================================================
+5. GOLDY TRADER V 1.0 - SPEZIFIKATION (NOCH ZU CODEN)
+================================================================================
+
+ARCHITEKTUR:
+- MT5, gleiches Konto wie Goldy AI
+- Auf Chart 2, separater Chart
+- KEINE Indikatoren visuell auf dem Chart
+- Liest Indikator-Daten via iCustom() im Hintergrund
+- Dashboard nimmt den ganzen Chart ein
+
+AUTO-TRADING LOGIK:
+- Reagiert auf KI-Signale aus GlobalVariables
+- Trade-Ausloeser: Stufe 2 + Sicherheit HOCH + 3 passende Kerzen
+- 3-Kerzen-Check selbst via iClose/iOpen
+- Symbol automatisch vom Chart
+- Lotgroesse fix einstellbar
+- KEIN Stop Loss, KEIN Take Profit
+- Schliessen NUR bei Gegen-Signal von KI
+- Magic Number: 12345 (GOLDY)
+- Max 1 Auto-Trade gleichzeitig
+
+SICHERHEITS-FILTER (alle einstellbar im Input):
+- Sicherheit HOCH erforderlich
+- Maximaler Spread (Default: 30 Punkte)
+- Max Trades pro Tag (Default: 10)
+- Max Verlust pro Tag (Default: -200 EUR)
+- Default Lotgroesse: 0.10
+- User-ID-Schutz fuer Telegram
+
+KONFLIKT-AUFLOESUNG:
+- Manueller BUY offen + KI sagt SELL Stage 2 = HEDGING (beide parallel)
+- /buy bei Trade gleicher Richtung = PYRAMIDING (zusaetzlicher Trade)
+- /buy bei Trade gegen Richtung = HEDGING
+- Manuelle Chart-Klicks (Magic 0) werden auto-verwaltet
+- Filter (Spread etc.) bei /buy umgangen, aber WARNUNG vorher
+
+DASHBOARD AUF CHART:
+- Variante A: Chart komplett schwarz, keine Indikatoren visuell
+- Layout: 2 Spalten verteilt, kein Scrollen
+- Schriftgroesse: +20% Default, einstellbar (Standard/Gross/Sehr gross)
+- Theme: Dark Mode
+- Klappbar: Ja
+
+DASHBOARD-SEKTIONEN:
+- Header (Titel, Symbol, Status, Buttons)
+- System-Status (Online, OpenAI, Telegram, Konto)
+- Kosten-Tracker mit Tageslimit
+- Indikator-Werte (alle Baender live)
+- Aktueller Kreis mit Stabilitaet-Balken
+- Letzte KI-Analyse
+- Statistik Heute
+- Offene Trades
+- Steuerung:
+  * PAUSE / NOTSTOPP / ALLES SCHLIESSEN
+  * KI-Modus (Konservativ/Normal/Aggressiv)
+  * Zusatz-Anweisung an KI (Textfeld)
+
+TELEGRAM-BEFEHLE (im PRIVATEN Chat):
+- B oder b: zeigt Liste aller Befehle mit Kurzbeschreibung
+- /trade: Screenshot vom AI-Chart + Bewertung + /BUY /SELL /IGNORIEREN
+- /buy: BUY oeffnen (mit Bestaetigung /JA oder /NEIN)
+- /sell: SELL oeffnen (mit Bestaetigung /JA oder /NEIN)
+- /close: aktuellen Trade schliessen
+- /closeall: alle Trades schliessen
+- /status: Konto + offene Trades + Tagesstats
+- /pause /resume: Auto-Trading steuern
+- /emergency: NOTSTOPP - alles aus
+- /info: Tages-Statistik
+
+WICHTIG: KEINE Buttons (Telegram-Buttons sind unzuverlaessig)
+-> Stattdessen: Text-Befehle /JA /NEIN zum Tippen
+
+OEFFENTLICHE TELEGRAM-GRUPPE:
+- Format: Detailliert, OHNE Disclaimer, OHNE Lot, OHNE Sicherheit
+- Keine Bilder
+- Vorbereitung-Nachrichten (Stufe 1, Stufe 2) auch in Gruppe
+- Finale Trade-Signale
+- Trade-Updates: NUR "WIN geschlossen" oder "LOSS geschlossen"
+  KEINE P/L-Zahlen in Pips/EUR
+- Bilder von Online-Hosting (Alex schickt Links spaeter)
+
+KOMMUNIKATION MIT GOLDY AI (GlobalVariables):
+- Goldy_AI_Stufe_<Symbol>: 0/1/2/99 (keine/Stufe1/Stufe2/schliessen)
+- Goldy_AI_Richtung_<Symbol>: -1/0/1/99 (SELL/keine/BUY/schliessen)
+- Goldy_AI_Sicherheit_<Symbol>: 1/2/3 (niedrig/mittel/hoch)
+- Goldy_AI_Stabil_Min_<Symbol>: int (Minuten Kreis-Stabilitaet)
+- Goldy_AI_Letzte_Analyse_<Symbol>: timestamp
+- Goldy_AI_Preis_Dreht_<Symbol>: 0/1
+- Goldy_AI_Kerzen_Drehen_<Symbol>: 0/1
+
+WAS WENN:
+- OpenAI nicht erreichbar: AI EA stoppt, Trader ignoriert
+- Telegram nicht erreichbar: Trades trotzdem ausfuehren
+- Verbindungsabbruch zum Broker: Letzten Status merken
+
+EIGENE LOGIK IM TRADER (NEU):
+- News-Filter: kein Trade bei "3 Bullen News" (Definition siehe unten!)
+- Trendfilter fuer M1 XAUUSD (Definition siehe unten!)
+
+LOGGING & HEARTBEAT:
+- Tagebuch in Datei (Goldy/Logs/)
+- Taegliche Status-Nachricht
+- Fehler-Benachrichtigung an Privat-Chat
+
+================================================================================
+6. WAS MORGEN NOCH ZU KLAEREN IST (vor Code-Bau Goldy Trader)
+================================================================================
+
+5 OFFENE PUNKTE:
+
+1) NEWS-FILTER - was bedeutet "3 Bullen News"?
+   * Variante A: 3-Stier-Symbol (HIGH-Impact-News einzeln)
+   * Variante B: 3 News innerhalb 60 Min (Haeufigkeits-Block)
+   * Variante C: Beides kombiniert (Max-Empfehlung)
+   * Variante D: 3 bullische (positive) News
+   -> Alex muss klaeren welche Bedeutung!
+
+2) TRENDFILTER fuer M1 XAUUSD - welche Logik?
+   * Variante A: "Nur mit dem Trend traden"
+   * Variante B: "Nicht bei zu starkem Trend (ADX > 40)" (Max-Empfehlung)
+   * Variante C: "Nur Seitwaerts"
+   * Variante D: Eigener Vorschlag
+   -> Vorsicht: Mean-Reversion-Strategie tradet GEGEN den Trend!
+      Variante B passt am besten
+
+3) ADX-DEFAULT-WERTE (falls Variante B):
+   * Zeitebene: M15
+   * ADX(14)
+   * Maximalwert: 40 (ueber 40 = blockieren)
+   -> OK fuer dich?
+
+4) NEWS-FILTER konfigurierbar oder hardcoded?
+   * Konfigurierbar: Land, Wichtigkeit, Pause-Minuten, etc.
+   * Hardcoded: USD, HIGH-Impact, 15 Min Pause
+   -> MT5 hat eingebauten Wirtschaftskalender (CalendarValueHistory)
+      keine externe API noetig!
+
+5) BEREIT FUER CODE wenn Punkte 1-4 geklaert?
+
+================================================================================
+7. VOLLSTAENDIGER CODE: Goldy_AI_Helpers.mqh (KOMPILIERT OK)
+================================================================================
+
+Datei: MQL5/Include/Goldy_AI_Helpers.mqh
+
+Enthaelt folgende Funktionen:
+- Base64Encode() - Kodiert Bilder fuer OpenAI
+- ReadFileToArray() - Liest Datei als Bytes
+- JsonGetString() - Extrahiert Werte aus JSON-Antwort
+- UrlEncode() - Kodiert Telegram-Nachrichten
+- GoldyLog() - Schreibt Log mit Zeitstempel
+- ParseTimeRange() - Parst "10:00-20:00"
+- IsTimeInSchedule() - Prueft ob Zeit im Plan
+- GetTodaySchedule() - Heutiger Wochentag-Plan
+- EscapeForJson() - Macht String JSON-sicher
+
+WICHTIG: Verwendet CharToString(ASCII-Code) statt Escape-Sequenzen
+Status: KOMPILIERT OHNE FEHLER
+
+================================================================================
+8. VOLLSTAENDIGER CODE: Goldy_AI_V1.mq5 (KOMPILIERT OK)
+================================================================================
+
+Datei: MQL5/Experts/Goldy_AI_V1.mq5
+
+Enthaelt:
+- Includes (Trade.mqh, Goldy_AI_Helpers.mqh)
+- Windows API Imports (PostMessageW, GetAncestor mit "long")
+- 3 Enums (KI_MODELL, KI_MODUS, LOG_LEVEL)
+- ~30 Eingabe-Parameter in 9 Gruppen
+- AnalyseErgebnis-Struktur
+- ~20 globale Variablen
+- OnInit() - EA-Initialisierung
+- OnDeinit() - EA-Beendigung
+- OnTimer() - Hauptschleife
+- AnalyseDurchfuehren() - Komplette Analyse
+- IndikatorDatenLesen() - Liest beide Indikatoren
+- WanderTrackingUpdate() - Beobachtet Kreis-Stabilitaet
+- OpenAIAnalysieren() - Sendet Bild an OpenAI
+- GlobalsAktualisieren() - Schreibt fuer Trader-EA
+- LernBibSpeichern() - Speichert Analyse-JSON
+- TelegramSendMessage() - Sendet Text
+- TelegramSendPhoto() - Sendet Bild
+- TelegramSignalSenden() - Sendet Signal mit Bild
+- TelegramBefehleAbrufen() - Polling fuer Befehle
+- TelegramBefehlVerarbeiten() - Fuehrt Befehl aus
+- SchedulerPruefen() - Prueft Trading-Zeit
+- AutoTradingToggeln() - Klickt AutoTrading-Button
+- AlleTradesSchliessen() - Schliesst Trades vor AT-Aus
+- HeartbeatPruefen() - Taegliche Status-Nachricht
+- ChartOptimieren() - Macht Chart sauber
+
+Status: KOMPILIERT OHNE FEHLER
+
+================================================================================
+9. SETUP DAS NOCH GEMACHT WERDEN MUSS (vor erstem Test)
+================================================================================
+
+WEB-REQUEST URLs WHITELISTEN in MT5:
+1. Extras -> Optionen -> Expert Advisors
+2. WebRequest fuer aufgelistete URLs erlauben:
+   - https://api.openai.com
+   - https://api.telegram.org
+
+OPENAI API-KEY:
+1. https://platform.openai.com -> Login
+2. API Keys -> Create new secret key
+3. Key kopieren (sk-proj-...)
+4. Guthaben aufladen (mind. 5 USD zum Testen)
+
+TELEGRAM BOT:
+1. Telegram: @BotFather -> /newbot
+2. Bot-Namen waehlen
+3. Token bekommen (123456:ABC...)
+
+DEINE TELEGRAM USER-ID:
+1. Telegram: @userinfobot -> /start
+2. Du bekommst deine ID
+
+OEFFENTLICHE TELEGRAM-GRUPPE:
+1. Neue Gruppe erstellen
+2. Bot als Admin einladen
+3. Chat-ID herausfinden (negative Zahl mit -100 vorne)
+
+ROBOFOREX-DEMO-KONTO (zum Testen):
+1. MT5 -> Datei -> Neuen Demo-Account einrichten
+2. Probe-Konto bei Roboforex oeffnen
+3. Beide Indikatoren ins Chart laden:
+   - Goldy_Regression
+   - WaveIndicator
+
+================================================================================
+10. NAECHSTE SCHRITTE FUER MORGEN
+================================================================================
+
+REIHENFOLGE FUER DIE NAECHSTE SESSION:
+
+SCHRITT 1 (10 Min): Die 5 offenen Punkte oben klaeren
+  -> News-Filter Variante
+  -> Trendfilter Variante  
+  -> ADX-Werte
+  -> News-Filter konfigurierbar/hardcoded
+  -> Bereit fuer Code?
+
+SCHRITT 2 (langer Code): Goldy Trader V 1.0 schreiben
+  -> Helpers ggf. erweitern
+  -> Hauptcode mit allem (Dashboard, Trade-Logik, Telegram, Filter)
+  -> Wird sehr lang, ggf. in Teilen
+
+SCHRITT 3 (Fixes): Compile-Fehler durchgehen wie bei Goldy AI
+
+SCHRITT 4 (Setup): OpenAI + Telegram + Demo-Konto einrichten
+
+SCHRITT 5 (Test): Erster Live-Test mit DEMO
+
+SCHRITT 6 (Spaeter):
+- Online-Bilder-Links fuer Telegram-Nachrichten
+- Goldy AI/Trader Kommunikation im Detail erklaeren
+- Eventuell Optimierungen
+
+================================================================================
+11. WICHTIGE NOTIZEN
+================================================================================
+
+ALEX' VERSTAENDNIS:
+- Alex ist KEIN Programmierer
+- Alle Erklaerungen auf einfachem Deutsch
+- Kommentare im Code auf Deutsch
+- Bei Fehlern: Schritt fuer Schritt fixen
+
+SCHLECHTE AUGEN:
+- Schriftgroessen im Dashboard +20% Default
+- Einstellbar: Standard / Gross / Sehr gross
+
+KEINE EMOJIS IM CODE:
+- Verursachen Encoding-Probleme im MetaEditor
+- Stattdessen: Text-Beschreibungen
+
+CHARSET-PROBLEME ZU VERMEIDEN:
+- CharToString(ASCII-Code) statt Escape-Sequenzen
+- Z.B. CharToString(10) statt "\n"
+- Z.B. CharToString(34) statt '\"'
+- Z.B. CharToString(92) statt "\\"
+
+WINDOWS API IN MT5:
+- MT5 ist 64-bit -> Verwende "long" statt "int" fuer hWnd
+- AutoTrading-Button-ID: 32851 (NICHT 33020 wie in MT4!)
+- PostMessageW statt SendMessageW (sauberer)
+
+RESERVIERTE WOERTER VERMEIDEN:
+- input, extern, static, const, struct, class, return
+- range, dash, etc.
+- Nutze: inputText, singleRange, dashPos statt diesen
+
+================================================================================
+12. ALEX' STRATEGIE-ERFAHRUNG
+================================================================================
+
+- Alex tradet manuell mit dem Indikator
+- 5 Tage ohne Verlust (Stand: vor Projektbeginn)
+- Strategie funktioniert: nur Signale im Dev1/Dev2 Bereich
+- Mittlere Signale werden ignoriert
+- Mean Reversion Trading (BUY am Tief, SELL am Hoch)
+
+KOSTEN-VORSTELLUNG:
+- OpenAI Vision API: bewusst, dass es Geld kostet
+- Tageslimit: 5 EUR (einstellbar)
+- Mit gpt-4o-mini: ca. 18-40 EUR/Monat
+- Mit gpt-4o: ca. 90-240 EUR/Monat
+- VPS: ca. 10-25 USD/Monat
+
+================================================================================
+ENDE - GUTE NACHT ALEX! BIS MORGEN!
+================================================================================
