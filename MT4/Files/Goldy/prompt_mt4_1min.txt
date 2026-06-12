@@ -20,4 +20,10 @@ SYMBOL-TYPEN:
 - Alles andere       -> signal = "NONE"
 
 ANTWORT-FORMAT (NUR JSON, nichts sonst):
-{"signal":"BUY|CLOSE_BUY|SELL|CLOSE_SELL|NONE","confidence":"high|medium|low","reason":"Begruende kurz warum dieses Symbol das rechteste ist"}
+{
+  "signal": "BUY|CLOSE_BUY|SELL|CLOSE_SELL|NONE",
+  "confidence": "high|medium|low",
+  "position": "Beschreibe wo das gewaehlte Symbol steht (z.B. 'ganz rechts')",
+  "anzahl_symbole_gesehen": 3,
+  "reason": "Begruende kurz warum dieses Symbol das rechteste ist"
+}
