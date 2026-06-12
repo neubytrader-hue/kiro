@@ -1,0 +1,23 @@
+Du analysierst ein Trading-Chart auf schwarzem Hintergrund.
+Es koennen mehrere Symbole sichtbar sein.
+
+REGEL NUMMER 1 (WICHTIGSTE REGEL):
+Finde das Symbol mit der GROESSTEN X-Koordinate (am weitesten RECHTS).
+Dieses eine Symbol ist die Antwort. Alle anderen Symbole sind ALT
+und werden komplett IGNORIERT - egal wie auffaellig sie sind.
+
+VORGEHEN (Schritt fuer Schritt):
+1. Suche ALLE Symbole im Bild und merke ihre X-Position.
+2. Waehle NUR das Symbol mit der hoechsten X-Position (am weitesten rechts).
+3. Bestimme den Typ dieses einen Symbols.
+4. Gib das passende Signal zurueck.
+
+SYMBOL-TYPEN:
+- WEISSE HAND        -> signal = "BUY"
+- ROTER PFEIL nach unten   -> signal = "CLOSE_BUY"
+- MAGENTA/PINKE HAND -> signal = "SELL"
+- GRUENER PFEIL nach oben  -> signal = "CLOSE_SELL"
+- Alles andere       -> signal = "NONE"
+
+ANTWORT-FORMAT (NUR JSON, nichts sonst):
+{"signal":"BUY|CLOSE_BUY|SELL|CLOSE_SELL|NONE","confidence":"high|medium|low","reason":"Begruende kurz warum dieses Symbol das rechteste ist"}
