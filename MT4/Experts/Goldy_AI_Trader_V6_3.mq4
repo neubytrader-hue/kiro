@@ -1,8 +1,14 @@
 //+------------------------------------------------------------------+
-//|                                    Goldy_AI_Trader_V6_2.mq4      |
-//|                                  GOLDY AI TRADER V 6.2            |
+//|                                    Goldy_AI_Trader_V6_3.mq4      |
+//|                                  GOLDY AI TRADER V 6.3            |
 //|                                  Copyright 2026, Alex             |
 //+------------------------------------------------------------------+
+//|  CHANGES V6.3 (vs V6.2):                                          |
+//|  - Debug-Bild: Bild das zur KI geht wird gespeichert              |
+//|    (Datei: goldy_v6_letztes_bild.png in MQL4\Files\)              |
+//|    -> So kann man genau sehen was die KI sieht                    |
+//|  - Input: Debug_Bild_Speichern (Default Ja)                       |
+//|                                                                   |
 //|  CHANGES V6.2 (vs V6.1):                                          |
 //|  - Pyramiding: bis zu 3 Trades pro Richtung gleichzeitig          |
 //|  - BUY-Pool und SELL-Pool unabhaengig (Hedging moeglich)          |
@@ -12,13 +18,10 @@
 //|  CHANGES V6.1 (vs V6.0):                                          |
 //|  - Screenshot wird jetzt RECHTS-AUSGERICHTET zugeschnitten        |
 //|    (ChartScreenShot mit ALIGN_RIGHT statt WindowScreenShot)       |
-//|  - 3 neue Inputs: Crop_Aktiv, Crop_Breite_Pixel, Crop_Hoehe_Pixel |
-//|  - Verbesserter Fallback-Prompt mit "REGEL NUMMER 1: rechtestes"  |
-//|  - Erweitertes Logging fuer Screenshot-Groesse                    |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Alex"
-#property version   "6.20"
-#property description "GOLDY AI TRADER V 6.2 - Multi-Trade (Pyramiding)"
+#property version   "6.30"
+#property description "GOLDY AI TRADER V 6.3 - Debug-Bild + Pyramiding"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -54,6 +57,11 @@ input string   __Crop_Header      = "==== SCREENSHOT-CROP (KI sieht nur rechte B
 input ENUM_JN  Crop_Aktiv         = Ja;     // Crop aktivieren
 input int      Crop_Breite_Pixel  = 350;    // Breite (kleiner = weniger alte Symbole)
 input int      Crop_Hoehe_Pixel   = 800;    // Hoehe
+//=======================================================================
+
+//==== NEU IN V6.3: DEBUG-BILD ==========================================
+input string   __Debug_Header     = "==== DEBUG ====";
+input ENUM_JN  Debug_Bild_Speichern = Ja;  // Bild fuer KI in MQL4\Files\ behalten (zum Pruefen)
 //=======================================================================
 
 input string   __Maske_Header     = "==== SCHWARZE MASKE (BMP) ====";
@@ -441,7 +449,8 @@ bool SendeText(string text, string chat_id)
 //+------------------------------------------------------------------+
 string KI_Analyse()
 {
-   string datei = "goldy_v6_temp.png";
+   // V6.3: Bild bleibt liegen wenn Debug aktiv -> klarer Dateiname
+   string datei = (Debug_Bild_Speichern == Ja) ? "goldy_v6_letztes_bild.png" : "goldy_v6_temp.png";
 
    //==== NEU IN V6.1: ChartScreenShot statt WindowScreenShot =========
    // ChartScreenShot mit ALIGN_RIGHT rendert nur die letzten Bars,
@@ -472,7 +481,10 @@ string KI_Analyse()
    ArrayResize(bild, size);
    FileReadArray(fh, bild, 0, size);
    FileClose(fh);
-   FileDelete(datei);
+
+   // V6.3: Datei nur loeschen wenn Debug AUS ist
+   if(Debug_Bild_Speichern == Nein)
+      FileDelete(datei);
 
    string b64 = Base64(bild);
    string content = OpenAI_Senden(b64);
