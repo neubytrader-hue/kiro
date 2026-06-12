@@ -12,18 +12,49 @@ VORGEHEN (Schritt fuer Schritt):
 3. Bestimme den Typ dieses einen Symbols.
 4. Gib das passende Signal zurueck.
 
-SYMBOL-TYPEN:
-- WEISSE HAND        -> signal = "BUY"
-- ROTER PFEIL nach unten   -> signal = "CLOSE_BUY"
-- MAGENTA/PINKE HAND -> signal = "SELL"
-- GRUENER PFEIL nach oben  -> signal = "CLOSE_SELL"
-- Alles andere       -> signal = "NONE"
+SYMBOL-TYPEN (mit Farb-Toleranz):
+- HAND, weiss/hellgrau/silbrig (egal welcher Helligkeitswert)
+  -> signal = "BUY"
+
+- PFEIL nach UNTEN, rot/orange/orangerot/dunkelrot
+  (jeglicher Rot-/Orange-Ton)
+  -> signal = "CLOSE_BUY"
+
+- HAND, magenta/pink/violett/lila/dunkelrosa
+  (jeglicher Pink-/Magenta-Ton)
+  -> signal = "SELL"
+
+- PFEIL nach OBEN, gruen/hellgruen/limegruen
+  (jeglicher Gruen-Ton)
+  -> signal = "CLOSE_SELL"
+
+- Etwas anderes (oder kein Symbol sichtbar)
+  -> signal = "NONE"
+
+WICHTIG ZUR FARBE:
+Sei NICHT zu streng mit der Farbe. Auch wenn ein Pfeil eher orange als
+rot wirkt, oder eine Hand eher hellgrau als weiss ist, ordne ihn dem
+am besten passenden Typ zu. Bei vier moeglichen Symbolen ist es immer
+klar welches gemeint ist:
+- HAND (egal Farbton)  = Entry-Signal (BUY oder SELL)
+- PFEIL (egal Farbton) = Close-Signal (CLOSE_BUY oder CLOSE_SELL)
+
+Pfeil zeigt nach UNTEN  -> CLOSE_BUY
+Pfeil zeigt nach OBEN   -> CLOSE_SELL
+Hand hell (weisslich)   -> BUY
+Hand pink (rosa/lila)   -> SELL
+
+WICHTIG ZUR LOGIK:
+Du weisst NICHT, ob ein Trade gerade offen ist.
+Deine einzige Aufgabe: Welches Symbol ist am weitesten rechts?
+Antworte AUCH wenn du das gleiche Symbol schon vorher gesehen hast.
+Der EA selbst entscheidet dann was zu tun ist.
 
 ANTWORT-FORMAT (NUR JSON, nichts sonst):
 {
   "signal": "BUY|CLOSE_BUY|SELL|CLOSE_SELL|NONE",
   "confidence": "high|medium|low",
-  "position": "Beschreibe wo das gewaehlte Symbol steht (z.B. 'ganz rechts')",
-  "anzahl_symbole_gesehen": 3,
-  "reason": "Begruende kurz warum dieses Symbol das rechteste ist"
+  "position": "Beschreibe wo das gewaehlte Symbol steht (z.B. 'rechts oben')",
+  "anzahl_symbole_gesehen": 2,
+  "reason": "Begruende kurz: welches Symbol war es und welche Farbe?"
 }
