@@ -1,8 +1,14 @@
 //+------------------------------------------------------------------+
 //|                                      Goldy_AI_Trader_V6.mq4      |
-//|                                  GOLDY AI TRADER V 6.1            |
+//|                                  GOLDY AI TRADER V 6.2            |
 //|                                  Copyright 2026, Alex             |
 //+------------------------------------------------------------------+
+//|  CHANGES V6.2 (vs V6.1):                                          |
+//|  - Pyramiding: bis zu 3 Trades pro Richtung gleichzeitig          |
+//|  - BUY-Pool und SELL-Pool unabhaengig (Hedging moeglich)          |
+//|  - Pro Richtung eigener Cooldown (Default 120 Sek)                |
+//|  - CLOSE-Pfeil schliesst ALLE Trades dieser Richtung auf einmal   |
+//|                                                                   |
 //|  CHANGES V6.1 (vs V6.0):                                          |
 //|  - Screenshot wird jetzt RECHTS-AUSGERICHTET zugeschnitten        |
 //|    (ChartScreenShot mit ALIGN_RIGHT statt WindowScreenShot)       |
@@ -11,8 +17,8 @@
 //|  - Erweitertes Logging fuer Screenshot-Groesse                    |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Alex"
-#property version   "6.10"
-#property description "GOLDY AI TRADER V 6.1 - Screenshot-Crop Update"
+#property version   "6.20"
+#property description "GOLDY AI TRADER V 6.2 - Multi-Trade (Pyramiding)"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -36,6 +42,12 @@ input string   Erlaubte_ID        = "";
 input string   __Trading_Header   = "==== TRADING ====";
 input double   Lot                = 0.10;
 input int      Magic              = 1001;
+
+//==== NEU IN V6.2: MEHRERE TRADES (PYRAMIDING) =========================
+input string   __Multi_Header     = "==== MEHRERE TRADES (Pyramiding) ====";
+input int      Max_Trades_Pro_Richtung = 3;    // Max gleichzeitige Trades pro Richtung
+input int      Min_Sekunden_Zw_Trades  = 120;  // Cooldown zwischen 2 Trades gleicher Richtung
+//=======================================================================
 
 //==== NEU IN V6.1: SCREENSHOT-CROP =====================================
 input string   __Crop_Header      = "==== SCREENSHOT-CROP (KI sieht nur rechte Bars) ====";
@@ -88,10 +100,11 @@ string CloseTrade_URL = "https://i.postimg.cc/Xv0PpD9j/close-trade.jpg";
 //+------------------------------------------------------------------+
 //| GLOBALE VARIABLEN                                                |
 //+------------------------------------------------------------------+
-string g_prompt = "";
-string g_letztes_signal = "NONE";
-uint   g_letzte_analyse = 0;
-int    g_offener_trade_typ = -1;
+string   g_prompt = "";
+string   g_letztes_signal = "NONE";
+uint     g_letzte_analyse = 0;
+datetime g_letzter_buy_zeit  = 0;   // V6.2: Cooldown fuer BUY-Pool
+datetime g_letzter_sell_zeit = 0;   // V6.2: Cooldown fuer SELL-Pool
 
 //+------------------------------------------------------------------+
 //| OnInit                                                            |
@@ -151,12 +164,14 @@ int OnInit()
       Print("CROP AUS: kompletter Chart wird gesendet");
 
    // Trade-Status pruefen
-   g_offener_trade_typ = FindeOffenenTrade();
+   int buys  = ZaehleOffeneTrades(OP_BUY);
+   int sells = ZaehleOffeneTrades(OP_SELL);
 
    EventSetTimer(1);
-   Print("=== GOLDY AI TRADER V6.1 gestartet ===");
+   Print("=== GOLDY AI TRADER V6.2 gestartet ===");
    Print("Intervall: ", Analyse_Intervall, " Sek");
-   Print("Offener Trade: ", (g_offener_trade_typ == OP_BUY ? "BUY" : (g_offener_trade_typ == OP_SELL ? "SELL" : "KEINER")));
+   Print("Pyramiding: max ", Max_Trades_Pro_Richtung, " Trades pro Richtung, Cooldown ", Min_Sekunden_Zw_Trades, "s");
+   Print("Aktuell offen: BUY=", buys, "/", Max_Trades_Pro_Richtung, " SELL=", sells, "/", Max_Trades_Pro_Richtung);
 
    return(INIT_SUCCEEDED);
 }
@@ -165,11 +180,11 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    ObjectDelete("GOLDY_MASKE");
-   Print("=== GOLDY AI TRADER V6.1 beendet ===");
+   Print("=== GOLDY AI TRADER V6.2 beendet ===");
 }
 
 //+------------------------------------------------------------------+
-//| HAUPTLOGIK                                                       |
+//| HAUPTLOGIK (V6.2: Multi-Trade / Pyramiding)                      |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
@@ -178,30 +193,77 @@ void OnTimer()
       return;
    g_letzte_analyse = jetzt;
 
-   g_offener_trade_typ = FindeOffenenTrade();
    string signal = KI_Analyse();
 
-   Print("KI-Signal: ", signal, " | Trade offen: ", (g_offener_trade_typ == OP_BUY ? "BUY" : (g_offener_trade_typ == OP_SELL ? "SELL" : "KEINER")));
+   // Aktuellen Pool-Stand ermitteln
+   int buys  = ZaehleOffeneTrades(OP_BUY);
+   int sells = ZaehleOffeneTrades(OP_SELL);
 
-   if(g_offener_trade_typ == -1)
+   Print("KI-Signal: ", signal,
+         " | Offen: BUY=", buys, "/", Max_Trades_Pro_Richtung,
+         " SELL=", sells, "/", Max_Trades_Pro_Richtung);
+
+   //--- BUY OEFFNEN -------------------------------------------------
+   if(signal == "BUY")
    {
-      // Kein Trade offen -> nur Haende akzeptieren
-      if(signal == "BUY")
-      { Print(">>> TRADE OEFFNEN: BUY"); TradeOeffnen(OP_BUY); }
-      else if(signal == "SELL")
-      { Print(">>> TRADE OEFFNEN: SELL"); TradeOeffnen(OP_SELL); }
-      else if(signal == "CLOSE_BUY" || signal == "CLOSE_SELL")
-      { Print("Pfeil ignoriert (kein Trade offen)"); }
+      if(buys >= Max_Trades_Pro_Richtung)
+      {
+         Print("BUY ignoriert - Max erreicht (", buys, "/", Max_Trades_Pro_Richtung, ")");
+         return;
+      }
+      int sek_seit_letztem = (g_letzter_buy_zeit > 0) ? (int)(TimeCurrent() - g_letzter_buy_zeit) : 999999;
+      if(sek_seit_letztem < Min_Sekunden_Zw_Trades)
+      {
+         int rest = Min_Sekunden_Zw_Trades - sek_seit_letztem;
+         Print("BUY Cooldown - noch ", rest, "s warten");
+         return;
+      }
+      Print(">>> TRADE OEFFNEN: BUY (#", (buys + 1), " von ", Max_Trades_Pro_Richtung, ")");
+      TradeOeffnen(OP_BUY);
+      g_letzter_buy_zeit = TimeCurrent();
    }
-   else
+   //--- SELL OEFFNEN ------------------------------------------------
+   else if(signal == "SELL")
    {
-      // Trade offen -> nur Pfeile akzeptieren
-      if(g_offener_trade_typ == OP_BUY && signal == "CLOSE_BUY")
-      { Print(">>> TRADE SCHLIESSEN: BUY"); TradeSchliessen(OP_BUY); }
-      else if(g_offener_trade_typ == OP_SELL && signal == "CLOSE_SELL")
-      { Print(">>> TRADE SCHLIESSEN: SELL"); TradeSchliessen(OP_SELL); }
-      else if(signal != "NONE")
-      { Print("Signal ", signal, " ignoriert (Trade offen)"); }
+      if(sells >= Max_Trades_Pro_Richtung)
+      {
+         Print("SELL ignoriert - Max erreicht (", sells, "/", Max_Trades_Pro_Richtung, ")");
+         return;
+      }
+      int sek_seit_letztem = (g_letzter_sell_zeit > 0) ? (int)(TimeCurrent() - g_letzter_sell_zeit) : 999999;
+      if(sek_seit_letztem < Min_Sekunden_Zw_Trades)
+      {
+         int rest = Min_Sekunden_Zw_Trades - sek_seit_letztem;
+         Print("SELL Cooldown - noch ", rest, "s warten");
+         return;
+      }
+      Print(">>> TRADE OEFFNEN: SELL (#", (sells + 1), " von ", Max_Trades_Pro_Richtung, ")");
+      TradeOeffnen(OP_SELL);
+      g_letzter_sell_zeit = TimeCurrent();
+   }
+   //--- ALLE BUY SCHLIESSEN -----------------------------------------
+   else if(signal == "CLOSE_BUY")
+   {
+      if(buys > 0)
+      {
+         Print(">>> SCHLIESSE ALLE BUY-Trades (", buys, " Stueck)");
+         SchliesseAlleTrades(OP_BUY);
+         g_letzter_buy_zeit = 0;  // Cooldown zuruecksetzen
+      }
+      else
+         Print("CLOSE_BUY ignoriert - keine BUY-Trades offen");
+   }
+   //--- ALLE SELL SCHLIESSEN ----------------------------------------
+   else if(signal == "CLOSE_SELL")
+   {
+      if(sells > 0)
+      {
+         Print(">>> SCHLIESSE ALLE SELL-Trades (", sells, " Stueck)");
+         SchliesseAlleTrades(OP_SELL);
+         g_letzter_sell_zeit = 0;  // Cooldown zuruecksetzen
+      }
+      else
+         Print("CLOSE_SELL ignoriert - keine SELL-Trades offen");
    }
 }
 
@@ -227,19 +289,21 @@ void MaskePlatzieren()
 }
 
 //+------------------------------------------------------------------+
-//| TRADE FUNKTIONEN                                                 |
+//| TRADE FUNKTIONEN (V6.2: Multi-Trade / Pyramiding)                |
 //+------------------------------------------------------------------+
-int FindeOffenenTrade()
+// Zaehlt alle offenen Trades eines bestimmten Typs (OP_BUY oder OP_SELL)
+// nur fuer diese Magic-Number und dieses Symbol.
+int ZaehleOffeneTrades(int typ)
 {
+   int anzahl = 0;
    for(int i = 0; i < OrdersTotal(); i++)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
       if(OrderMagicNumber() != Magic) continue;
       if(OrderSymbol() != Symbol()) continue;
-      if(OrderType() == OP_BUY || OrderType() == OP_SELL)
-         return OrderType();
+      if(OrderType() == typ) anzahl++;
    }
-   return -1;
+   return anzahl;
 }
 
 void TradeOeffnen(int typ)
@@ -249,7 +313,6 @@ void TradeOeffnen(int typ)
 
    if(ticket > 0)
    {
-      g_offener_trade_typ = typ;
       string richtung = (typ == OP_BUY) ? "BUY" : "SELL";
       Print("TRADE GEOEFFNET: ", richtung, " @ ", DoubleToStr(preis, Digits), " Ticket: ", ticket);
 
@@ -260,8 +323,11 @@ void TradeOeffnen(int typ)
       Print("TRADE FEHLER: ", GetLastError());
 }
 
-void TradeSchliessen(int typ)
+// Schliesst ALLE offenen Trades eines bestimmten Typs (BUY oder SELL).
+// V6.2: Wird durch CLOSE_BUY / CLOSE_SELL Signale ausgeloest.
+void SchliesseAlleTrades(int typ)
 {
+   // Rueckwaerts iterieren weil sich der Index aendert wenn Orders geschlossen werden
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
@@ -272,18 +338,20 @@ void TradeSchliessen(int typ)
       double preis = (typ == OP_BUY) ? Bid : Ask;
       double open_preis = OrderOpenPrice();
       datetime open_zeit = OrderOpenTime();
+      int ticket = OrderTicket();
 
-      if(OrderClose(OrderTicket(), OrderLots(), preis, 10, clrNONE))
+      if(OrderClose(ticket, OrderLots(), preis, 10, clrNONE))
       {
          double profit = OrderProfit() + OrderSwap() + OrderCommission();
-         g_offener_trade_typ = -1;
          string richtung = (typ == OP_BUY) ? "BUY" : "SELL";
          bool ist_win = (profit > 0);
-         Print("TRADE GESCHLOSSEN: ", richtung, " P/L: ", DoubleToStr(profit, 2));
+         Print("TRADE GESCHLOSSEN: ", richtung, " Ticket: ", ticket, " P/L: ", DoubleToStr(profit, 2));
 
-         // Telegram Nachricht
+         // Telegram Nachricht (pro geschlossenem Trade einzeln)
          SendeTradeGeschlossen(typ, open_preis, preis, profit, open_zeit, ist_win);
       }
+      else
+         Print("CLOSE FEHLER fuer Ticket ", ticket, ": ", GetLastError());
    }
 }
 

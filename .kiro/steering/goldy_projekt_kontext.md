@@ -50,22 +50,28 @@ Das **neueste** Symbol ist immer **am weitesten rechts** im Chart.
   - Gruppe 1: Trade-Nachrichten (New Trade, Win/Loss, Reports)
   - Gruppe 2: Befehle + Dashboard (b, /on, /off, /status, etc.)
 
-## Aktuelle Code-Version: V6.1
+## Aktuelle Code-Version: V6.2
 
 **Pfad:** `MT4/Experts/Goldy_AI_Trader_V6.mq4`
 **Prompt-Datei:** `MT4/Files/Goldy/prompt_mt4_1min.txt`
 (Datei wird zur Laufzeit aus `Common\Files\Goldy\` gelesen)
 
-### Was V6.1 anders macht als V6.0
-1. **Screenshot-Crop**: `ChartScreenShot()` mit `ALIGN_RIGHT` statt `WindowScreenShot()`
-   → KI sieht nur die rechten Bars, alte Symbole sind physisch nicht im Bild
-2. **3 neue Inputs**: `Crop_Aktiv`, `Crop_Breite_Pixel` (Default 350), `Crop_Hoehe_Pixel` (Default 800)
-3. **Verbesserter Fallback-Prompt** mit "REGEL NUMMER 1: rechtestes Symbol"
+### Was V6.2 anders macht als V6.1
+1. **Pyramiding**: Bis zu 3 Trades pro Richtung gleichzeitig (einstellbar)
+2. **BUY-Pool und SELL-Pool unabhängig** → Hedging möglich (BUY und SELL können parallel offen sein)
+3. **Eigener Cooldown pro Richtung**: Default 120 Sek (einstellbar)
+4. **CLOSE-Pfeil schließt ALLE Trades dieser Richtung** auf einmal
 
-### V6.1 Inputs (Übersicht)
+### Was V6.1 anders machte als V6.0
+1. **Screenshot-Crop**: `ChartScreenShot()` mit `ALIGN_RIGHT` statt `WindowScreenShot()`
+2. 3 neue Inputs: `Crop_Aktiv`, `Crop_Breite_Pixel` (Default 350), `Crop_Hoehe_Pixel` (Default 800)
+3. Verbesserter Fallback-Prompt mit "REGEL NUMMER 1: rechtestes Symbol"
+
+### V6.2 Inputs (Übersicht)
 - OPENAI: API_Key, Analyse_Intervall (60), API_Timeout (30)
 - TELEGRAM: Bot_Token, Chat_ID, Erlaubte_ID
 - TRADING: Lot (0.10), Magic (1001)
+- **MEHRERE TRADES (NEU)**: Max_Trades_Pro_Richtung (3), Min_Sekunden_Zw_Trades (120)
 - SCREENSHOT-CROP: Aktiv, Breite, Höhe
 - SCHWARZE MASKE (BMP): optional, Default Nein
 - KI: Prompt_Datei
@@ -73,9 +79,13 @@ Das **neueste** Symbol ist immer **am weitesten rechts** im Chart.
 - NACHRICHT TRADE GESCHLOSSEN: Bild + Felder (Entry, Close, P/L, Dauer, etc.)
 - WIN/LOSS Bilder
 
-### Trade-Logik (im EA)
-- Kein Trade offen → nur Hände akzeptieren (BUY/SELL öffnen)
-- Trade offen → nur Pfeile akzeptieren (CLOSE_BUY/CLOSE_SELL)
+### Trade-Logik (V6.2)
+- **BUY-Pool** (max 3) und **SELL-Pool** (max 3) sind unabhängig
+- Pro Pool eigener Cooldown (Default 120s)
+- BUY-Signal: Wenn Pool nicht voll und Cooldown vorbei → Trade öffnen
+- SELL-Signal: Analog (auch wenn BUY-Trades offen → Hedging)
+- CLOSE_BUY: Schließt alle BUY-Trades auf einmal
+- CLOSE_SELL: Schließt alle SELL-Trades auf einmal
 - Signal nur reagieren wenn `confidence == high`
 
 ## Bekannte Probleme & Lösungen
