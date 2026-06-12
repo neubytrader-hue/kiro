@@ -52,7 +52,7 @@ Das **neueste** Symbol ist immer **am weitesten rechts** im Chart.
 
 ## Aktuelle Code-Version: V6.2
 
-**Pfad:** `MT4/Experts/Goldy_AI_Trader_V6.mq4`
+**Pfad:** `MT4/Experts/Goldy_AI_Trader_V6_2.mq4`
 **Prompt-Datei:** `MT4/Files/Goldy/prompt_mt4_1min.txt`
 (Datei wird zur Laufzeit aus `Common\Files\Goldy\` gelesen)
 
