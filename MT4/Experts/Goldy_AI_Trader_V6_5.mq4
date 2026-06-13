@@ -1,18 +1,21 @@
 //+------------------------------------------------------------------+
-//|                                    Goldy_AI_Trader_V6_4.mq4      |
-//|                                  GOLDY AI TRADER V 6.4            |
+//|                                    Goldy_AI_Trader_V6_5.mq4      |
+//|                                  GOLDY AI TRADER V 6.5            |
 //|                                  Copyright 2026, Alex             |
 //+------------------------------------------------------------------+
+//|  CHANGES V6.5 (vs V6.4):                                          |
+//|  - KI-Modell als Input waehlbar (gpt-4o-mini, gpt-4o,             |
+//|    gpt-5.4-mini, gpt-4.1-mini, etc.)                              |
+//|  - Bild-Detail als Input (low/high)                               |
+//|    -> high lasst die KI Bilder in voller Aufloesung sehen         |
+//|    -> Wichtig fuer kleine Symbole (Sterne, etc.)                  |
+//|                                                                   |
 //|  CHANGES V6.4 (vs V6.3):                                          |
 //|  - UMDREHEN-Modus: 1 Signal macht 2 Aktionen                      |
-//|    -> BUY-Signal schliesst alle SELL + oeffnet 1 BUY              |
-//|    -> SELL-Signal schliesst alle BUY + oeffnet 1 SELL             |
-//|    Fuer Indikatoren wie Sterne (Rot=SELL, Gruen=BUY)              |
-//|  - Wenn Modus_Umdrehen=Nein: Verhalten wie V6.3 (GETRENNT)        |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Alex"
-#property version   "6.40"
-#property description "GOLDY AI TRADER V 6.4 - Umdrehen-Modus"
+#property version   "6.50"
+#property description "GOLDY AI TRADER V 6.5 - KI-Modell + Bild-Detail"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -27,6 +30,10 @@ input string   __API_Header       = "==== OPENAI ====";
 input string   API_Key            = "DEIN_KEY_HIER";
 input int      Analyse_Intervall  = 60;
 input int      API_Timeout        = 30;
+//==== NEU IN V6.5: KI-MODELL + BILD-DETAIL =============================
+input string   KI_Modell          = "gpt-4o-mini";  // gpt-4o-mini, gpt-4o, gpt-5-mini, gpt-5.4-mini, gpt-4.1-mini
+input string   Bild_Detail        = "high";         // low (billig, Bild auf 512x512) oder high (teurer, volle Aufloesung)
+//=======================================================================
 
 input string   __Telegram_Header  = "==== TELEGRAM ====";
 input string   Bot_Token          = "DEIN_TOKEN";
@@ -172,7 +179,8 @@ int OnInit()
    int sells = ZaehleOffeneTrades(OP_SELL);
 
    EventSetTimer(1);
-   Print("=== GOLDY AI TRADER V6.4 gestartet ===");
+   Print("=== GOLDY AI TRADER V6.5 gestartet ===");
+   Print("KI-Modell: ", KI_Modell, " | Bild-Detail: ", Bild_Detail);
    Print("Intervall: ", Analyse_Intervall, " Sek");
    Print("Pyramiding: max ", Max_Trades_Pro_Richtung, " Trades pro Richtung, Cooldown ", Min_Sekunden_Zw_Trades, "s");
    if(Modus_Umdrehen == Ja)
@@ -188,7 +196,7 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    ObjectDelete("GOLDY_MASKE");
-   Print("=== GOLDY AI TRADER V6.4 beendet ===");
+   Print("=== GOLDY AI TRADER V6.5 beendet ===");
 }
 
 //+------------------------------------------------------------------+
@@ -527,13 +535,17 @@ string OpenAI_Senden(string bild_b64)
    string sys = EscJson(g_prompt);
    string usr = EscJson("Analysiere das Bild. Antworte NUR mit JSON: {" + dq + "signal" + dq + ":" + dq + "BUY/SELL/CLOSE_BUY/CLOSE_SELL/NONE" + dq + "," + dq + "confidence" + dq + ":" + dq + "high/medium/low" + dq + "," + dq + "reason" + dq + ":" + dq + "..." + dq + "}");
 
-   string body = "{" + dq + "model" + dq + ":" + dq + "gpt-4o-mini" + dq + ",";
+   // V6.5: Modell und Bild-Detail aus Input
+   string body = "{" + dq + "model" + dq + ":" + dq + KI_Modell + dq + ",";
    body += dq + "max_tokens" + dq + ":150," + dq + "temperature" + dq + ":0.1,";
    body += dq + "messages" + dq + ":[";
    body += "{" + dq + "role" + dq + ":" + dq + "system" + dq + "," + dq + "content" + dq + ":" + dq + sys + dq + "},";
    body += "{" + dq + "role" + dq + ":" + dq + "user" + dq + "," + dq + "content" + dq + ":[";
    body += "{" + dq + "type" + dq + ":" + dq + "text" + dq + "," + dq + "text" + dq + ":" + dq + usr + dq + "},";
-   body += "{" + dq + "type" + dq + ":" + dq + "image_url" + dq + "," + dq + "image_url" + dq + ":{" + dq + "url" + dq + ":" + dq + "data:image/png;base64," + bild_b64 + dq + "}}]}]}";
+   body += "{" + dq + "type" + dq + ":" + dq + "image_url" + dq + "," + dq + "image_url" + dq + ":{";
+   body += dq + "url" + dq + ":" + dq + "data:image/png;base64," + bild_b64 + dq + ",";
+   body += dq + "detail" + dq + ":" + dq + Bild_Detail + dq;
+   body += "}}]}]}";
 
    string headers = "Content-Type: application/json" + CharToString(13) + nl + "Authorization: Bearer " + API_Key + CharToString(13) + nl;
    char post[]; StringToCharArray(body, post, 0, StringLen(body), CP_UTF8);
