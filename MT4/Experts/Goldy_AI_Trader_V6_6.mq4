@@ -177,7 +177,7 @@ int OnInit()
    int sells = ZaehleOffeneTrades(OP_SELL);
 
    EventSetTimer(1);
-   Print("=== GOLDY AI TRADER V6.5 gestartet ===");
+   Print("=== GOLDY AI TRADER V6.6 gestartet ===");
    Print("KI-Modell: ", KI_Modell, " | Bild-Detail: ", Bild_Detail);
    Print("Intervall: ", Analyse_Intervall, " Sek");
    Print("Pyramiding: max ", Max_Trades_Pro_Richtung, " Trades pro Richtung, Cooldown ", Min_Sekunden_Zw_Trades, "s");
