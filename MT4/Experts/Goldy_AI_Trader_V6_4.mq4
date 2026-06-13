@@ -1,27 +1,18 @@
 //+------------------------------------------------------------------+
-//|                                    Goldy_AI_Trader_V6_3.mq4      |
-//|                                  GOLDY AI TRADER V 6.3            |
+//|                                    Goldy_AI_Trader_V6_4.mq4      |
+//|                                  GOLDY AI TRADER V 6.4            |
 //|                                  Copyright 2026, Alex             |
 //+------------------------------------------------------------------+
-//|  CHANGES V6.3 (vs V6.2):                                          |
-//|  - Debug-Bild: Bild das zur KI geht wird gespeichert              |
-//|    (Datei: goldy_v6_letztes_bild.png in MQL4\Files\)              |
-//|    -> So kann man genau sehen was die KI sieht                    |
-//|  - Input: Debug_Bild_Speichern (Default Ja)                       |
-//|                                                                   |
-//|  CHANGES V6.2 (vs V6.1):                                          |
-//|  - Pyramiding: bis zu 3 Trades pro Richtung gleichzeitig          |
-//|  - BUY-Pool und SELL-Pool unabhaengig (Hedging moeglich)          |
-//|  - Pro Richtung eigener Cooldown (Default 120 Sek)                |
-//|  - CLOSE-Pfeil schliesst ALLE Trades dieser Richtung auf einmal   |
-//|                                                                   |
-//|  CHANGES V6.1 (vs V6.0):                                          |
-//|  - Screenshot wird jetzt RECHTS-AUSGERICHTET zugeschnitten        |
-//|    (ChartScreenShot mit ALIGN_RIGHT statt WindowScreenShot)       |
+//|  CHANGES V6.4 (vs V6.3):                                          |
+//|  - UMDREHEN-Modus: 1 Signal macht 2 Aktionen                      |
+//|    -> BUY-Signal schliesst alle SELL + oeffnet 1 BUY              |
+//|    -> SELL-Signal schliesst alle BUY + oeffnet 1 SELL             |
+//|    Fuer Indikatoren wie Sterne (Rot=SELL, Gruen=BUY)              |
+//|  - Wenn Modus_Umdrehen=Nein: Verhalten wie V6.3 (GETRENNT)        |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Alex"
-#property version   "6.30"
-#property description "GOLDY AI TRADER V 6.3 - Debug-Bild + Pyramiding"
+#property version   "6.40"
+#property description "GOLDY AI TRADER V 6.4 - Umdrehen-Modus"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -50,6 +41,11 @@ input int      Magic              = 1001;
 input string   __Multi_Header     = "==== MEHRERE TRADES (Pyramiding) ====";
 input int      Max_Trades_Pro_Richtung = 3;    // Max gleichzeitige Trades pro Richtung
 input int      Min_Sekunden_Zw_Trades  = 120;  // Cooldown zwischen 2 Trades gleicher Richtung
+//=======================================================================
+
+//==== NEU IN V6.4: UMDREHEN-MODUS ======================================
+input string   __Umdrehen_Header  = "==== UMDREHEN-MODUS (fuer Sterne-Indikator) ====";
+input ENUM_JN  Modus_Umdrehen     = Nein;  // Ja = Gegen-Trades schliessen + neuen oeffnen
 //=======================================================================
 
 //==== NEU IN V6.1: SCREENSHOT-CROP =====================================
@@ -176,9 +172,13 @@ int OnInit()
    int sells = ZaehleOffeneTrades(OP_SELL);
 
    EventSetTimer(1);
-   Print("=== GOLDY AI TRADER V6.2 gestartet ===");
+   Print("=== GOLDY AI TRADER V6.4 gestartet ===");
    Print("Intervall: ", Analyse_Intervall, " Sek");
    Print("Pyramiding: max ", Max_Trades_Pro_Richtung, " Trades pro Richtung, Cooldown ", Min_Sekunden_Zw_Trades, "s");
+   if(Modus_Umdrehen == Ja)
+      Print("UMDREHEN-MODUS AKTIV: Gegen-Trades werden bei neuem Signal automatisch geschlossen");
+   else
+      Print("Modus GETRENNT: BUY/SELL = oeffnen, CLOSE_BUY/CLOSE_SELL = schliessen");
    Print("Aktuell offen: BUY=", buys, "/", Max_Trades_Pro_Richtung, " SELL=", sells, "/", Max_Trades_Pro_Richtung);
 
    return(INIT_SUCCEEDED);
@@ -188,7 +188,7 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    ObjectDelete("GOLDY_MASKE");
-   Print("=== GOLDY AI TRADER V6.2 beendet ===");
+   Print("=== GOLDY AI TRADER V6.4 beendet ===");
 }
 
 //+------------------------------------------------------------------+
@@ -214,6 +214,14 @@ void OnTimer()
    //--- BUY OEFFNEN -------------------------------------------------
    if(signal == "BUY")
    {
+      // V6.4: Im UMDREHEN-Modus erst alle SELL schliessen
+      if(Modus_Umdrehen == Ja && sells > 0)
+      {
+         Print(">>> UMDREHEN: Schliesse alle ", sells, " SELL-Trades");
+         SchliesseAlleTrades(OP_SELL);
+         g_letzter_sell_zeit = 0;
+         sells = 0;  // wurden ja gerade geschlossen
+      }
       if(buys >= Max_Trades_Pro_Richtung)
       {
          Print("BUY ignoriert - Max erreicht (", buys, "/", Max_Trades_Pro_Richtung, ")");
@@ -233,6 +241,14 @@ void OnTimer()
    //--- SELL OEFFNEN ------------------------------------------------
    else if(signal == "SELL")
    {
+      // V6.4: Im UMDREHEN-Modus erst alle BUY schliessen
+      if(Modus_Umdrehen == Ja && buys > 0)
+      {
+         Print(">>> UMDREHEN: Schliesse alle ", buys, " BUY-Trades");
+         SchliesseAlleTrades(OP_BUY);
+         g_letzter_buy_zeit = 0;
+         buys = 0;  // wurden ja gerade geschlossen
+      }
       if(sells >= Max_Trades_Pro_Richtung)
       {
          Print("SELL ignoriert - Max erreicht (", sells, "/", Max_Trades_Pro_Richtung, ")");
